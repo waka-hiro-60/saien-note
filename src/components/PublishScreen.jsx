@@ -14,20 +14,21 @@ const COLORS = {
   tagText:      '#3A6B47',
 };
 
-const API_ENDPOINT = 'https://api.saien.career-life.tech/publish';
+const IS_OWNER      = import.meta.env.VITE_OWNER_MODE === 'true';
+const API_ENDPOINT  = 'https://api.saien.career-life.tech/publish';
 
 async function publishToApi(selectedRecords) {
   const apiKey = import.meta.env.VITE_API_KEY;
 
-  // 画像をFormDataで送信
   const formData = new FormData();
-
   const recordsMeta = selectedRecords.map((r) => ({
     id:       r.id,
     date:     r.date,
     time:     r.time,
     comment:  r.comment,
+    text:     r.text,
     tags:     r.tags,
+    category: r.category,
     imageKey: r.id,
   }));
 
@@ -37,11 +38,15 @@ async function publishToApi(selectedRecords) {
     if (r.imageBlob) {
       formData.append(`image_${r.id}`, r.imageBlob, `${r.id}.jpg`);
     }
+    if (r.images) {
+      r.images.forEach((blob, i) => {
+        formData.append(`image_${r.id}_${i}`, blob, `${r.id}_${i}.jpg`);
+      });
+    }
   }
 
   if (!apiKey) {
-    // モック：API未設定の場合はコンソールに出力するだけ
-    console.log('[PublishScreen] VITE_API_KEY が未設定のためモック送信:', recordsMeta);
+    console.log('[PublishScreen] VITE_API_KEY 未設定のためモック送信:', recordsMeta);
     return { ok: true, mock: true };
   }
 
@@ -59,11 +64,18 @@ async function publishToApi(selectedRecords) {
   return res.json();
 }
 
+function getCategoryIcon(r) {
+  const cat = r.category ?? 'veggie';
+  if (cat === 'diary') return '📔';
+  if (cat === 'bed')   return '🌱';
+  return '🥬';
+}
+
 export function PublishScreen({ records }) {
-  const [selected,    setSelected]    = useState([]);
-  const [publishing,  setPublishing]  = useState(false);
-  const [error,       setError]       = useState(null);
-  const [successMsg,  setSuccessMsg]  = useState('');
+  const [selected,   setSelected]   = useState([]);
+  const [publishing, setPublishing] = useState(false);
+  const [error,      setError]      = useState(null);
+  const [successMsg, setSuccessMsg] = useState('');
 
   const unpublished = records.records.filter((r) => !r.archived && !r.published);
   const published   = records.records.filter((r) => !r.archived &&  r.published);
@@ -78,16 +90,14 @@ export function PublishScreen({ records }) {
   const clearAll  = () => setSelected([]);
 
   const handlePublish = async () => {
-    if (selected.length === 0) return;
+    if (!IS_OWNER || selected.length === 0) return;
     setPublishing(true);
     setError(null);
     setSuccessMsg('');
     try {
       const targets = records.records.filter((r) => selected.includes(r.id));
       const result  = await publishToApi(targets);
-      if (result.mock) {
-        console.log('[PublishScreen] モック公開完了:', selected);
-      }
+      if (result.mock) console.log('[PublishScreen] モック公開完了:', selected);
       await records.publish(selected);
       setSelected([]);
       setSuccessMsg(`${targets.length}件を公開しました`);
@@ -121,14 +131,13 @@ export function PublishScreen({ records }) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-        {/* メッセージ */}
         {error && (
-          <div style={{ padding: 10, borderRadius: 8, background: '#FEE', color: '#C00', fontSize: 14, marginBottom: 12 }}>
+          <div style={{ padding: 12, borderRadius: 8, background: '#FEE', color: '#C00', fontSize: 16, marginBottom: 12 }}>
             エラー: {error}
           </div>
         )}
         {successMsg && (
-          <div style={{ padding: 10, borderRadius: 8, background: COLORS.primaryLight, color: COLORS.primary, fontSize: 14, marginBottom: 12 }}>
+          <div style={{ padding: 12, borderRadius: 8, background: COLORS.primaryLight, color: COLORS.primary, fontSize: 16, marginBottom: 12 }}>
             {successMsg}
           </div>
         )}
@@ -136,39 +145,40 @@ export function PublishScreen({ records }) {
         {/* 未公開セクション */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: COLORS.text }}>
+            <span style={{ fontSize: 17, fontWeight: 600, color: COLORS.text }}>
               未公開の記録（{unpublished.length}件）
             </span>
             <div style={{ display: 'flex', gap: 6 }}>
               <button
                 onClick={selectAll}
                 style={{
-                  padding: '5px 10px', borderRadius: 8,
+                  padding: '8px 14px', borderRadius: 8, minHeight: 44,
                   border: `1px solid ${COLORS.border}`, background: COLORS.card,
-                  color: COLORS.textLight, fontSize: 13, cursor: 'pointer',
+                  color: COLORS.textLight, fontSize: 16, cursor: 'pointer',
                 }}
               >全選択</button>
               <button
                 onClick={clearAll}
                 style={{
-                  padding: '5px 10px', borderRadius: 8,
+                  padding: '8px 14px', borderRadius: 8, minHeight: 44,
                   border: `1px solid ${COLORS.border}`, background: COLORS.card,
-                  color: COLORS.textLight, fontSize: 13, cursor: 'pointer',
+                  color: COLORS.textLight, fontSize: 16, cursor: 'pointer',
                 }}
               >解除</button>
             </div>
           </div>
 
           {records.loading ? (
-            <div style={{ textAlign: 'center', color: COLORS.textLight, padding: 20 }}>読み込み中…</div>
+            <div style={{ textAlign: 'center', color: COLORS.textLight, padding: 20, fontSize: 16 }}>読み込み中…</div>
           ) : unpublished.length === 0 ? (
-            <div style={{ textAlign: 'center', color: COLORS.textLight, padding: 20, fontSize: 14 }}>
+            <div style={{ textAlign: 'center', color: COLORS.textLight, padding: 20, fontSize: 16 }}>
               未公開の記録はありません
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {unpublished.map((r) => {
                 const checked = selected.includes(r.id);
+                const label   = r.text || r.comment || '';
                 return (
                   <div
                     key={r.id}
@@ -177,30 +187,32 @@ export function PublishScreen({ records }) {
                       display: 'flex', alignItems: 'center', gap: 12,
                       background: checked ? COLORS.primaryLight : COLORS.card,
                       border: `1px solid ${checked ? COLORS.primary : COLORS.border}`,
-                      borderRadius: 10, padding: '10px 14px', cursor: 'pointer',
+                      borderRadius: 10, padding: '12px 16px', cursor: 'pointer',
+                      minHeight: 56,
                     }}
                   >
                     <div style={{
-                      width: 22, height: 22, borderRadius: 6,
+                      width: 26, height: 26, borderRadius: 8,
                       border: `2px solid ${checked ? COLORS.primary : COLORS.border}`,
                       background: checked ? COLORS.primary : 'transparent',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       flexShrink: 0,
                     }}>
-                      {checked && <span style={{ color: '#fff', fontSize: 14 }}>✓</span>}
+                      {checked && <span style={{ color: '#fff', fontSize: 16 }}>✓</span>}
                     </div>
+                    <span style={{ fontSize: 20 }}>{getCategoryIcon(r)}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, color: COLORS.textLight }}>{r.date}{r.time ? ` ${r.time}` : ''}</div>
-                      {r.comment && (
+                      <div style={{ fontSize: 16, color: COLORS.textLight }}>{r.date}{r.time ? ` ${r.time}` : ''}</div>
+                      {label && (
                         <div style={{
-                          fontSize: 14, color: COLORS.text,
+                          fontSize: 18, color: COLORS.text,
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>{r.comment}</div>
+                        }}>{label}</div>
                       )}
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
                         {(r.tags ?? []).slice(0, 3).map((tag) => (
                           <span key={tag} style={{
-                            fontSize: 11, padding: '2px 6px', borderRadius: 20,
+                            fontSize: 14, padding: '2px 8px', borderRadius: 20,
                             background: COLORS.tagBg, color: COLORS.tagText,
                           }}>{tag}</span>
                         ))}
@@ -215,11 +227,11 @@ export function PublishScreen({ records }) {
 
         {/* 公開済みセクション */}
         <div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: COLORS.text, marginBottom: 10 }}>
+          <div style={{ fontSize: 17, fontWeight: 600, color: COLORS.text, marginBottom: 10 }}>
             公開済みの記録（{published.length}件）
           </div>
           {published.length === 0 ? (
-            <div style={{ textAlign: 'center', color: COLORS.textLight, padding: 20, fontSize: 14 }}>
+            <div style={{ textAlign: 'center', color: COLORS.textLight, padding: 20, fontSize: 16 }}>
               公開済みの記録はありません
             </div>
           ) : (
@@ -230,27 +242,29 @@ export function PublishScreen({ records }) {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12,
                     background: COLORS.card, border: `1px solid ${COLORS.border}`,
-                    borderRadius: 10, padding: '10px 14px',
+                    borderRadius: 10, padding: '12px 16px',
                   }}
                 >
-                  <span style={{ fontSize: 18 }}>🌐</span>
+                  <span style={{ fontSize: 22 }}>🌐</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, color: COLORS.textLight }}>{r.date}{r.time ? ` ${r.time}` : ''}</div>
-                    {r.comment && (
+                    <div style={{ fontSize: 16, color: COLORS.textLight }}>{r.date}{r.time ? ` ${r.time}` : ''}</div>
+                    {(r.text || r.comment) && (
                       <div style={{
-                        fontSize: 14, color: COLORS.text,
+                        fontSize: 18, color: COLORS.text,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>{r.comment}</div>
+                      }}>{r.text || r.comment}</div>
                     )}
                   </div>
-                  <button
-                    onClick={() => handleUnpublish(r.id)}
-                    style={{
-                      padding: '5px 10px', borderRadius: 8,
-                      border: `1px solid ${COLORS.border}`, background: COLORS.card,
-                      color: COLORS.textLight, fontSize: 13, cursor: 'pointer', flexShrink: 0,
-                    }}
-                  >非公開に戻す</button>
+                  {IS_OWNER && (
+                    <button
+                      onClick={() => handleUnpublish(r.id)}
+                      style={{
+                        padding: '8px 14px', borderRadius: 8, minHeight: 44,
+                        border: `1px solid ${COLORS.border}`, background: COLORS.card,
+                        color: COLORS.textLight, fontSize: 15, cursor: 'pointer', flexShrink: 0,
+                      }}
+                    >非公開に戻す</button>
+                  )}
                 </div>
               ))}
             </div>
@@ -258,32 +272,34 @@ export function PublishScreen({ records }) {
         </div>
       </div>
 
-      {/* 公開ボタン */}
-      <div style={{
-        padding: '12px 16px',
-        background: COLORS.card,
-        borderTop: `1px solid ${COLORS.border}`,
-        flexShrink: 0,
-      }}>
-        <button
-          onClick={handlePublish}
-          disabled={selected.length === 0 || publishing}
-          style={{
-            width: '100%', padding: '14px', borderRadius: 8,
-            border: 'none', background: COLORS.primary,
-            color: '#fff', fontSize: 16, fontWeight: 600,
-            cursor: (selected.length === 0 || publishing) ? 'not-allowed' : 'pointer',
-            opacity: (selected.length === 0 || publishing) ? 0.5 : 1,
-          }}
-        >
-          {publishing
-            ? '公開中…'
-            : selected.length > 0
-              ? `選択した${selected.length}件をまとめて公開`
-              : '公開する記録を選択してください'
-          }
-        </button>
-      </div>
+      {/* 公開ボタン（オーナーモードのみ） */}
+      {IS_OWNER && (
+        <div style={{
+          padding: '12px 16px',
+          background: COLORS.card,
+          borderTop: `1px solid ${COLORS.border}`,
+          flexShrink: 0,
+        }}>
+          <button
+            onClick={handlePublish}
+            disabled={selected.length === 0 || publishing}
+            style={{
+              width: '100%', padding: '16px', borderRadius: 8, minHeight: 56,
+              border: 'none', background: COLORS.primary,
+              color: '#fff', fontSize: 18, fontWeight: 600,
+              cursor: (selected.length === 0 || publishing) ? 'not-allowed' : 'pointer',
+              opacity: (selected.length === 0 || publishing) ? 0.5 : 1,
+            }}
+          >
+            {publishing
+              ? '公開中…'
+              : selected.length > 0
+                ? `選択した${selected.length}件をまとめて公開`
+                : '公開する記録を選択してください'
+            }
+          </button>
+        </div>
+      )}
     </div>
   );
 }

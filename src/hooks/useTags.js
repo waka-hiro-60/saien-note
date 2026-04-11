@@ -1,25 +1,24 @@
 // src/hooks/useTags.js
 import { useState, useEffect, useCallback } from 'react';
-import { getTags, saveTags, addTag, removeTag } from '../utils/db';
+import {
+  getTags, saveTags, addTag, removeTag,
+  getBedVeggieMap, saveBedVeggieMap,
+} from '../utils/db';
 
-/**
- * タグを操作するカスタムフック
- *
- * 使い方:
- *   const { tags, loading, add, remove, reorder } = useTags();
- */
 export function useTags() {
-  const [tags,    setTags]    = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
+  const [tags,         setTags]         = useState({});
+  const [bedVeggieMap, setBedVeggieMap] = useState({});
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState(null);
 
-  // ─── 初回読み込み（なければ初期値をセット） ───
+  // ─── 初回読み込み ───
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
-        const data = await getTags();
+        const [data, bvm] = await Promise.all([getTags(), getBedVeggieMap()]);
         setTags(data);
+        setBedVeggieMap(bvm);
       } catch (e) {
         setError(e.message);
       } finally {
@@ -72,7 +71,7 @@ export function useTags() {
   const addCategory = useCallback(async (category) => {
     try {
       setError(null);
-      if (tags[category]) return tags; // すでに存在する
+      if (tags[category]) return tags;
       const current = { ...tags, [category]: [] };
       await saveTags(current);
       setTags(current);
@@ -83,21 +82,32 @@ export function useTags() {
     }
   }, [tags]);
 
-  // ─── 全タグをフラット配列で取得（検索フィルター用） ───
-  const allTagsFlat = Object.values(tags).flat();
+  // ─── 畝↔野菜マッピングを更新 ───
+  const updateBedVeggieMap = useCallback(async (newMap) => {
+    try {
+      setError(null);
+      await saveBedVeggieMap(newMap);
+      setBedVeggieMap({ ...newMap });
+    } catch (e) {
+      setError(e.message);
+      throw e;
+    }
+  }, []);
 
-  // ─── カテゴリ一覧 ───
-  const categories = Object.keys(tags);
+  const allTagsFlat = Object.values(tags).flat();
+  const categories  = Object.keys(tags);
 
   return {
     tags,           // { 野菜: [...], 状態: [...], 場所: [...] }
-    categories,     // ['野菜', '状態', '場所']
-    allTagsFlat,    // ['トマト（大玉）', 'キュウリ', ...]
+    categories,
+    allTagsFlat,
+    bedVeggieMap,   // { '畝1': ['トマト（大玉）', ...], ... }
     loading,
     error,
-    add,            // タグを1件追加
-    remove,         // タグを1件削除
-    reorder,        // カテゴリ内の並び替え
-    addCategory,    // カテゴリを新規追加
+    add,
+    remove,
+    reorder,
+    addCategory,
+    updateBedVeggieMap,
   };
 }

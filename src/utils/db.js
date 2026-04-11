@@ -4,8 +4,8 @@ import { get, set, del, keys, createStore } from 'idb-keyval';
 // ─────────────────────────────────────────
 // ストア定義（2つ）
 // ─────────────────────────────────────────
-export const recordsStore = createStore('saien-note-db', 'records');
-export const tagsStore    = createStore('saien-note-db', 'tags');
+export const recordsStore = createStore('saien-note-records', 'records');
+export const tagsStore    = createStore('saien-note-tags', 'tags');
 
 // ─────────────────────────────────────────
 // タグ初期データ
@@ -39,7 +39,6 @@ export async function compressImage(file) {
       const MAX = 1920;
       let { width, height } = img;
 
-      // 長辺が1920pxを超える場合だけリサイズ
       if (width > MAX || height > MAX) {
         if (width >= height) {
           height = Math.round((height * MAX) / width);
@@ -110,29 +109,74 @@ export async function getRecord(id) {
 
 /**
  * 新規記録を保存
- * @param {object} data - { date, time, imageFile, comment, tags }
+ * category: 'veggie' | 'bed' | 'diary'
+ *
+ * veggie: { category, date, time, imageFile, comment, tags }
+ * bed:    { category, date, time, imageFiles, comment, tags }
+ * diary:  { category, date, time, imageFiles, text }
  */
 export async function addRecord(data) {
-  const now = Date.now();
-  const id  = crypto.randomUUID();
+  const now      = Date.now();
+  const id       = crypto.randomUUID();
+  const category = data.category ?? 'veggie';
 
-  let imageBlob = null;
-  if (data.imageFile) {
-    imageBlob = await compressImage(data.imageFile);
+  let record;
+
+  if (category === 'diary') {
+    const images = [];
+    for (const file of (data.imageFiles ?? [])) {
+      images.push(await compressImage(file));
+    }
+    record = {
+      id,
+      category: 'diary',
+      date:      data.date ?? '',
+      time:      data.time ?? '',
+      images,
+      text:      data.text ?? '',
+      archived:  false,
+      published: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+  } else if (category === 'bed') {
+    const images = [];
+    for (const file of (data.imageFiles ?? [])) {
+      images.push(await compressImage(file));
+    }
+    record = {
+      id,
+      category: 'bed',
+      date:      data.date    ?? '',
+      time:      data.time    ?? '',
+      images,
+      comment:   data.comment ?? '',
+      tags:      data.tags    ?? [],
+      archived:  false,
+      published: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+  } else {
+    // veggie (既存互換)
+    let imageBlob = null;
+    if (data.imageFile) {
+      imageBlob = await compressImage(data.imageFile);
+    }
+    record = {
+      id,
+      category:  'veggie',
+      date:      data.date    ?? '',
+      time:      data.time    ?? '',
+      imageBlob,
+      comment:   data.comment ?? '',
+      tags:      data.tags    ?? [],
+      archived:  false,
+      published: false,
+      createdAt: now,
+      updatedAt: now,
+    };
   }
-
-  const record = {
-    id,
-    date:      data.date    ?? '',
-    time:      data.time    ?? '',
-    imageBlob,
-    comment:   data.comment ?? '',
-    tags:      data.tags    ?? [],
-    archived:  false,
-    published: false,
-    createdAt: now,
-    updatedAt: now,
-  };
 
   await set(id, record, recordsStore);
   return record;
@@ -140,28 +184,56 @@ export async function addRecord(data) {
 
 /**
  * 記録を更新
- * @param {string} id
- * @param {object} updates - 更新するフィールド
+ * veggie用: updates に imageFile を含める
+ * bed/diary用: updates に以下を含める
+ *   - imageFiles: File[]       → 全画像を置き換え
+ *   - addImageFiles: File[]    → 画像を追加
+ *   - images: Blob[]           → Blob直接置き換え（削除後配列渡し用）
  */
 export async function updateRecord(id, updates) {
   const existing = await get(id, recordsStore);
   if (!existing) throw new Error(`記録が見つかりません: ${id}`);
 
-  let imageBlob = existing.imageBlob;
-  if (updates.imageFile) {
-    imageBlob = await compressImage(updates.imageFile);
-    delete updates.imageFile;
+  const category = existing.category ?? 'veggie';
+
+  // 画像関連フィールドを分離
+  const {
+    imageFile,
+    imageFiles,
+    addImageFiles,
+    images: newImagesArray,
+    ...restUpdates
+  } = updates;
+
+  const base = { ...existing, ...restUpdates, updatedAt: Date.now() };
+
+  if (category === 'veggie') {
+    if (imageFile) {
+      base.imageBlob = await compressImage(imageFile);
+    }
+  } else {
+    // bed / diary
+    let images = existing.images ?? [];
+
+    if (newImagesArray !== undefined) {
+      // Blob[] 直接置き換え（UI上での削除後に渡す）
+      images = newImagesArray;
+    } else if (imageFiles && imageFiles.length > 0) {
+      images = [];
+      for (const file of imageFiles) {
+        images.push(await compressImage(file));
+      }
+    } else if (addImageFiles && addImageFiles.length > 0) {
+      for (const file of addImageFiles) {
+        images.push(await compressImage(file));
+      }
+    }
+
+    base.images = images;
   }
 
-  const updated = {
-    ...existing,
-    ...updates,
-    imageBlob,
-    updatedAt: Date.now(),
-  };
-
-  await set(id, updated, recordsStore);
-  return updated;
+  await set(id, base, recordsStore);
+  return base;
 }
 
 /**
@@ -182,7 +254,6 @@ export async function toggleArchive(id) {
 
 /**
  * まとめて公開
- * @param {string[]} ids
  */
 export async function publishRecords(ids) {
   await Promise.all(
@@ -201,9 +272,6 @@ export async function unpublishRecord(id) {
 // Tags CRUD
 // ─────────────────────────────────────────
 
-/**
- * タグ設定を取得（初回は初期値をセット）
- */
 export async function getTags() {
   const stored = await get('tags', tagsStore);
   if (stored) return stored;
@@ -211,16 +279,10 @@ export async function getTags() {
   return DEFAULT_TAGS;
 }
 
-/**
- * タグ設定を保存（全体を上書き）
- */
 export async function saveTags(tags) {
   await set('tags', tags, tagsStore);
 }
 
-/**
- * カテゴリにタグを1件追加
- */
 export async function addTag(category, tag) {
   const tags = await getTags();
   if (!tags[category]) tags[category] = [];
@@ -231,13 +293,24 @@ export async function addTag(category, tag) {
   return tags;
 }
 
-/**
- * カテゴリからタグを1件削除
- */
 export async function removeTag(category, tag) {
   const tags = await getTags();
   if (!tags[category]) return tags;
   tags[category] = tags[category].filter((t) => t !== tag);
   await saveTags(tags);
   return tags;
+}
+
+// ─────────────────────────────────────────
+// 畝↔野菜マッピング（tagsStoreに保存）
+// 例: { '畝1': ['トマト（大玉）', 'トマト（中玉）'], '畝2': ['キュウリ'] }
+// ─────────────────────────────────────────
+
+export async function getBedVeggieMap() {
+  const map = await get('bedVeggieMap', tagsStore);
+  return map ?? {};
+}
+
+export async function saveBedVeggieMap(map) {
+  await set('bedVeggieMap', map, tagsStore);
 }

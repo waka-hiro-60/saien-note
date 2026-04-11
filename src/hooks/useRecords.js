@@ -11,16 +11,10 @@ import {
   unpublishRecord,
 } from '../utils/db';
 
-/**
- * 記録を操作するカスタムフック
- *
- * 使い方:
- *   const { records, loading, error, add, update, remove, ... } = useRecords();
- */
 export function useRecords() {
-  const [records, setRecords]   = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error,   setError]     = useState(null);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
 
   // ─── 全記録を再読み込み ───
   const reload = useCallback(async () => {
@@ -36,7 +30,6 @@ export function useRecords() {
     }
   }, []);
 
-  // 初回マウント時に読み込み
   useEffect(() => {
     reload();
   }, [reload]);
@@ -131,22 +124,24 @@ export function useRecords() {
   const filterByTags = useCallback(
     (selectedTags) => {
       if (!selectedTags || selectedTags.length === 0) return records;
-      return records.filter((r) =>
-        selectedTags.every((tag) => r.tags.includes(tag))
-      );
+      return records.filter((r) => {
+        const rTags = r.tags ?? [];
+        return selectedTags.every((tag) => rTags.includes(tag));
+      });
     },
     [records]
   );
 
-  // ─── キーワード検索 ───
+  // ─── キーワード検索（comment / text フィールド両対応） ───
   const search = useCallback(
     (keyword) => {
       if (!keyword || keyword.trim() === '') return records;
       const kw = keyword.trim().toLowerCase();
       return records.filter(
         (r) =>
-          r.comment.toLowerCase().includes(kw) ||
-          r.tags.some((t) => t.toLowerCase().includes(kw))
+          (r.comment ?? '').toLowerCase().includes(kw) ||
+          (r.text    ?? '').toLowerCase().includes(kw) ||
+          (r.tags    ?? []).some((t) => t.toLowerCase().includes(kw))
       );
     },
     [records]
@@ -157,16 +152,18 @@ export function useRecords() {
     (keyword, selectedTags) => {
       let result = records;
       if (selectedTags && selectedTags.length > 0) {
-        result = result.filter((r) =>
-          selectedTags.every((tag) => r.tags.includes(tag))
-        );
+        result = result.filter((r) => {
+          const rTags = r.tags ?? [];
+          return selectedTags.every((tag) => rTags.includes(tag));
+        });
       }
       if (keyword && keyword.trim() !== '') {
         const kw = keyword.trim().toLowerCase();
         result = result.filter(
           (r) =>
-            r.comment.toLowerCase().includes(kw) ||
-            r.tags.some((t) => t.toLowerCase().includes(kw))
+            (r.comment ?? '').toLowerCase().includes(kw) ||
+            (r.text    ?? '').toLowerCase().includes(kw) ||
+            (r.tags    ?? []).some((t) => t.toLowerCase().includes(kw))
         );
       }
       return result;
@@ -175,10 +172,9 @@ export function useRecords() {
   );
 
   // ─── 特定タグの時系列記録（年比較用） ───
-  // returns: { [year]: Record[] }
   const getByTagGroupedByYear = useCallback(
     (tag) => {
-      const filtered = records.filter((r) => r.tags.includes(tag));
+      const filtered = records.filter((r) => (r.tags ?? []).includes(tag));
       return filtered.reduce((acc, r) => {
         const year = r.date ? r.date.slice(0, 4) : '不明';
         if (!acc[year]) acc[year] = [];
@@ -189,20 +185,32 @@ export function useRecords() {
     [records]
   );
 
+  // ─── 日付範囲で絞り込み（去年のこの頃 用） ───
+  const getRecordsInDateRange = useCallback(
+    (startDate, endDate) => {
+      return records.filter((r) => {
+        if (!r.date || r.archived) return false;
+        return r.date >= startDate && r.date <= endDate;
+      });
+    },
+    [records]
+  );
+
   return {
-    records,          // 全記録（撮影日時降順）
-    loading,          // 読み込み中フラグ
-    error,            // エラーメッセージ
-    reload,           // 再読み込み
-    add,              // 新規追加
-    update,           // 更新
-    remove,           // 削除
-    toggleArchived,   // アーカイブ切り替え
-    publish,          // まとめて公開
-    unpublish,        // 非公開に戻す
-    filterByTags,     // タグ絞り込み
-    search,           // キーワード検索
-    searchAndFilter,  // タグ＋キーワード複合検索
-    getByTagGroupedByYear, // 年比較用
+    records,
+    loading,
+    error,
+    reload,
+    add,
+    update,
+    remove,
+    toggleArchived,
+    publish,
+    unpublish,
+    filterByTags,
+    search,
+    searchAndFilter,
+    getByTagGroupedByYear,
+    getRecordsInDateRange,
   };
 }

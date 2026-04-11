@@ -7,15 +7,19 @@ const COLORS = {
   border:    '#E5E0D8',
 };
 
-const TABS = [
+const IS_OWNER = import.meta.env.VITE_OWNER_MODE === 'true';
+
+const ALL_TABS = [
   { id: 'home',    label: 'ホーム',  icon: '🏠' },
   { id: 'tag',     label: 'タグ',    icon: '🏷️' },
   { id: 'add',     label: '追加',    icon: '➕', isCenter: true },
-  { id: 'publish', label: '公開',    icon: '🌐' },
+  { id: 'publish', label: '公開',    icon: '🌐', ownerOnly: true },
   { id: 'setting', label: '設定',    icon: '⚙️' },
 ];
 
 export function TabBar({ activeTab, onTabChange }) {
+  const TABS = ALL_TABS.filter((t) => !t.ownerOnly || IS_OWNER);
+
   return (
     <div style={{
       display: 'flex',
@@ -42,11 +46,12 @@ export function TabBar({ activeTab, onTabChange }) {
                 background: 'transparent',
                 cursor: 'pointer',
                 padding: 0,
+                minHeight: 56,
               }}
             >
               <div style={{
-                width: 52,
-                height: 52,
+                width: 56,
+                height: 56,
                 borderRadius: '50%',
                 background: COLORS.primary,
                 display: 'flex',
@@ -77,13 +82,17 @@ export function TabBar({ activeTab, onTabChange }) {
               background: 'transparent',
               cursor: 'pointer',
               color: isActive ? COLORS.primary : COLORS.textLight,
-              minHeight: 44,
+              minHeight: 56,
               padding: '4px 0',
               gap: 2,
             }}
           >
-            <span style={{ fontSize: 20 }}>{tab.icon}</span>
-            <span style={{ fontSize: 11, fontWeight: isActive ? 600 : 400 }}>
+            <span style={{ fontSize: 22 }}>{tab.icon}</span>
+            <span style={{
+              fontSize: 12,
+              fontWeight: isActive ? 700 : 400,
+              letterSpacing: isActive ? '0.02em' : 0,
+            }}>
               {tab.label}
             </span>
           </button>
