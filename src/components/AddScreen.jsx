@@ -305,6 +305,7 @@ export function AddScreen({ records, tags, onDone }) {
     setError(null);
     try {
       if (mode === 'diary') {
+        console.log('[handleSave] diary 保存開始 imageFiles:', imageFiles.length, '枚', imageFiles.map((f) => `${f.name}(${f.size}bytes)`));
         await records.add({
           category: 'diary',
           date, time,
@@ -312,6 +313,7 @@ export function AddScreen({ records, tags, onDone }) {
           text,
         });
       } else if (mode === 'bed') {
+        console.log('[handleSave] bed 保存開始 imageFiles:', imageFiles.length, '枚', imageFiles.map((f) => `${f.name}(${f.size}bytes)`));
         await records.add({
           category: 'bed',
           date, time,
@@ -320,6 +322,7 @@ export function AddScreen({ records, tags, onDone }) {
           tags: selTags,
         });
       } else {
+        console.log('[handleSave] veggie 保存開始 imageFile:', imageFile ? `${imageFile.name}(${imageFile.size}bytes)` : 'なし');
         await records.add({
           category: 'veggie',
           date, time,
@@ -328,9 +331,10 @@ export function AddScreen({ records, tags, onDone }) {
           tags: selTags,
         });
       }
+      console.log('[handleSave] 保存完了');
       onDone();
     } catch (e) {
-      console.error(e);
+      console.error('[handleSave] 保存エラー:', e);
       setError(e.message);
     } finally {
       setSaving(false);

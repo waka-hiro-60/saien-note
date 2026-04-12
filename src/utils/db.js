@@ -124,8 +124,17 @@ export async function addRecord(data) {
 
   if (category === 'diary') {
     const images = [];
-    for (const file of (data.imageFiles ?? [])) {
-      images.push(await compressImage(file));
+    const fileList = Array.from(data.imageFiles ?? []);
+    console.log(`[addRecord] diary: ${fileList.length} 枚の画像を圧縮開始`);
+    for (let i = 0; i < fileList.length; i++) {
+      try {
+        const blob = await compressImage(fileList[i]);
+        images.push(blob);
+        console.log(`[addRecord] diary: ${i + 1}/${fileList.length} 枚目 圧縮完了 (${blob.size} bytes)`);
+      } catch (e) {
+        console.error(`[addRecord] diary: ${i + 1}/${fileList.length} 枚目 圧縮失敗`, e);
+        throw new Error(`画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
+      }
     }
     record = {
       id,
@@ -141,8 +150,17 @@ export async function addRecord(data) {
     };
   } else if (category === 'bed') {
     const images = [];
-    for (const file of (data.imageFiles ?? [])) {
-      images.push(await compressImage(file));
+    const fileList = Array.from(data.imageFiles ?? []);
+    console.log(`[addRecord] bed: ${fileList.length} 枚の画像を圧縮開始`);
+    for (let i = 0; i < fileList.length; i++) {
+      try {
+        const blob = await compressImage(fileList[i]);
+        images.push(blob);
+        console.log(`[addRecord] bed: ${i + 1}/${fileList.length} 枚目 圧縮完了 (${blob.size} bytes)`);
+      } catch (e) {
+        console.error(`[addRecord] bed: ${i + 1}/${fileList.length} 枚目 圧縮失敗`, e);
+        throw new Error(`画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
+      }
     }
     record = {
       id,
@@ -219,13 +237,31 @@ export async function updateRecord(id, updates) {
       // Blob[] 直接置き換え（UI上での削除後に渡す）
       images = newImagesArray;
     } else if (imageFiles && imageFiles.length > 0) {
+      const fileList = Array.from(imageFiles);
       images = [];
-      for (const file of imageFiles) {
-        images.push(await compressImage(file));
+      console.log(`[updateRecord] imageFiles: ${fileList.length} 枚の画像を圧縮開始`);
+      for (let i = 0; i < fileList.length; i++) {
+        try {
+          const blob = await compressImage(fileList[i]);
+          images.push(blob);
+          console.log(`[updateRecord] ${i + 1}/${fileList.length} 枚目 圧縮完了 (${blob.size} bytes)`);
+        } catch (e) {
+          console.error(`[updateRecord] ${i + 1}/${fileList.length} 枚目 圧縮失敗`, e);
+          throw new Error(`画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
+        }
       }
     } else if (addImageFiles && addImageFiles.length > 0) {
-      for (const file of addImageFiles) {
-        images.push(await compressImage(file));
+      const fileList = Array.from(addImageFiles);
+      console.log(`[updateRecord] addImageFiles: ${fileList.length} 枚の画像を圧縮開始`);
+      for (let i = 0; i < fileList.length; i++) {
+        try {
+          const blob = await compressImage(fileList[i]);
+          images.push(blob);
+          console.log(`[updateRecord] 追加 ${i + 1}/${fileList.length} 枚目 圧縮完了 (${blob.size} bytes)`);
+        } catch (e) {
+          console.error(`[updateRecord] 追加 ${i + 1}/${fileList.length} 枚目 圧縮失敗`, e);
+          throw new Error(`追加画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
+        }
       }
     }
 
