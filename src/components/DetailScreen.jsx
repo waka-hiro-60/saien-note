@@ -62,8 +62,14 @@ function BlobImage({ blob, style = {}, placeholder = '🌿' }) {
 // 畝記録の複数画像グリッド
 // ─────────────────────────────────────────
 
-function ImageGrid({ blobs, editable, onRemove }) {
-  if (!blobs || blobs.length === 0) {
+// urls が渡されたとき（編集モード）は <img src={url}> で表示し Blob URL を使わない。
+// blobs のみのとき（閲覧モード）は BlobImage（Blob URL）で表示する。
+function ImageGrid({ blobs, urls, editable, onRemove }) {
+  // urls が渡されているか否かで表示ソースを切り替える
+  const useUrls = Array.isArray(urls);
+  const count   = useUrls ? urls.length : (blobs?.length ?? 0);
+
+  if (count === 0) {
     return (
       <div style={{
         height: 160, background: '#E5E0D8',
@@ -75,14 +81,24 @@ function ImageGrid({ blobs, editable, onRemove }) {
     );
   }
 
-  if (blobs.length === 1) {
+  if (count === 1) {
     return (
       <div style={{ position: 'relative' }}>
         <div style={{ height: 260, background: '#000', position: 'relative' }}>
-          <BlobImage
-            blob={blobs[0]}
-            style={{ objectFit: 'contain', position: 'absolute', inset: 0 }}
-          />
+          {useUrls ? (
+            <img
+              src={urls[0] ?? undefined}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'absolute', inset: 0 }}
+              onLoad={() => console.log('[DEBUG] ImageGrid img onLoad (base64) index:0')}
+              onError={() => console.error('[DEBUG] ImageGrid img onError (base64) index:0')}
+            />
+          ) : (
+            <BlobImage
+              blob={blobs[0]}
+              style={{ objectFit: 'contain', position: 'absolute', inset: 0 }}
+            />
+          )}
         </div>
         {editable && (
           <button
@@ -107,10 +123,20 @@ function ImageGrid({ blobs, editable, onRemove }) {
       gap: 4, padding: 4,
       background: '#111',
     }}>
-      {blobs.map((blob, i) => (
+      {Array.from({ length: count }).map((_, i) => (
         <div key={i} style={{ position: 'relative', paddingTop: '100%' }}>
           <div style={{ position: 'absolute', inset: 0, borderRadius: 4, overflow: 'hidden' }}>
-            <BlobImage blob={blob} />
+            {useUrls ? (
+              <img
+                src={urls[i] ?? undefined}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onLoad={() => console.log(`[DEBUG] ImageGrid img onLoad (base64) index:${i}`)}
+                onError={() => console.error(`[DEBUG] ImageGrid img onError (base64) index:${i}`)}
+              />
+            ) : (
+              <BlobImage blob={blobs[i]} />
+            )}
           </div>
           {editable && (
             <button
@@ -286,6 +312,58 @@ export function DetailScreen({ record, onClose, records, tags }) {
   const headerTitle = category === 'diary' ? '活動日記' : category === 'bed' ? '畝の記録' : '野菜記録';
   const headerBg    = category === 'diary' ? COLORS.diaryBg : category === 'bed' ? COLORS.bedBg : COLORS.card;
 
+  // ─── editImages を base64 に変換して保持 ───
+  // Blob URL方式はiOS Safariでメモリ圧縮によりURLが無効化されることがある。
+  // base64 は URLの無効化が起きないため、既存写真の表示に使う。
+  const [editImageUrls, setEditImageUrls] = useState([]);
+
+  useEffect(() => {
+    if (!editImages || editImages.length === 0) {
+      console.log('[DEBUG] editImageUrls: editImages が空 → クリア');
+      setEditImageUrls([]);
+      return;
+    }
+
+    console.log('[DEBUG] editImages 変更検知 → base64変換開始 count:', editImages.length);
+    let cancelled = false;
+
+    const promises = editImages.map((blob, i) =>
+      new Promise((resolve) => {
+        if (!blob) {
+          console.warn(`[DEBUG] editImages[${i}] が null/undefined`);
+          resolve(null);
+          return;
+        }
+        console.log(`[DEBUG] FileReader 開始 editImages[${i}] size:`, blob.size, 'type:', blob.type);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result;
+          console.log(`[DEBUG] base64 完了 editImages[${i}] length:`, result?.length ?? 0);
+          resolve(result ?? null);
+        };
+        reader.onerror = () => {
+          console.error(`[DEBUG] FileReader エラー editImages[${i}]`);
+          resolve(null);
+        };
+        reader.readAsDataURL(blob);
+      })
+    );
+
+    Promise.all(promises).then((urls) => {
+      if (cancelled) {
+        console.log('[DEBUG] base64変換キャンセル済み（cleanup済み）');
+        return;
+      }
+      console.log('[DEBUG] setEditImageUrls 完了 urls.length:', urls.length);
+      setEditImageUrls(urls);
+    });
+
+    return () => {
+      cancelled = true;
+      console.log('[DEBUG] editImages useEffect cleanup → 変換キャンセル');
+    };
+  }, [editImages]);
+
   // 新規追加画像のプレビューURL管理
   // ファイル単位でURLをキャッシュし、追加時に既存URLを破棄しない
   const newFileUrlMapRef = useRef(new Map()); // File → objectURL
@@ -427,7 +505,8 @@ export function DetailScreen({ record, onClose, records, tags }) {
         {category === 'bed' && (
           <>
             <ImageGrid
-              blobs={editMode ? editImages : (record.images ?? [])}
+              blobs={editMode ? undefined : (record.images ?? [])}
+              urls={editMode ? editImageUrls : undefined}
               editable={editMode}
               onRemove={handleRemoveEditImage}
             />
@@ -491,7 +570,8 @@ export function DetailScreen({ record, onClose, records, tags }) {
         {category === 'diary' && (
           <>
             <ImageGrid
-              blobs={editMode ? editImages : (record.images ?? [])}
+              blobs={editMode ? undefined : (record.images ?? [])}
+              urls={editMode ? editImageUrls : undefined}
               editable={editMode}
               onRemove={handleRemoveEditImage}
             />
