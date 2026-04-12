@@ -1,5 +1,5 @@
 // src/components/DetailScreen.jsx
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 const COLORS = {
   bg:           '#F7F5F0',
@@ -23,12 +23,20 @@ const COLORS = {
 
 function BlobImage({ blob, style = {}, placeholder = '🌿' }) {
   const [url, setUrl] = useState(null);
+  // retryKey を増やすと effect が再実行されて URL を再生成する
+  const [retryKey, setRetryKey] = useState(0);
+
   useEffect(() => {
     if (!blob) { setUrl(null); return; }
     const u = URL.createObjectURL(blob);
     setUrl(u);
     return () => URL.revokeObjectURL(u);
-  }, [blob]);
+  }, [blob, retryKey]);
+
+  // ブラウザがURLを無効化した場合（iOS Safariのメモリ圧縮など）に再生成
+  const handleError = useCallback(() => {
+    setRetryKey((k) => (k < 5 ? k + 1 : k));
+  }, []);
 
   if (!url) {
     return (
@@ -44,42 +52,10 @@ function BlobImage({ blob, style = {}, placeholder = '🌿' }) {
     <img
       src={url}
       alt=""
+      onError={handleError}
       style={{ width: '100%', height: '100%', objectFit: 'cover', ...style }}
     />
   );
-}
-
-// ─────────────────────────────────────────
-// 野菜記録の詳細レイアウト（既存互換）
-// ─────────────────────────────────────────
-
-function VeggieDetail({ record, editMode, editState, cameraRef, albumRef }) {
-  const { editDate, setEditDate, editTime, setEditTime, editComment, setEditComment,
-          editTags, setEditTags, editImageFile, setEditImageFile } = editState;
-  const [editImageUrl, setEditImageUrl] = useState(null);
-  const [imgUrl, setImgUrl] = useState(null);
-
-  useEffect(() => {
-    if (!record.imageBlob) return;
-    const u = URL.createObjectURL(record.imageBlob);
-    setImgUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [record.imageBlob]);
-
-  useEffect(() => {
-    if (!editImageFile) { setEditImageUrl(null); return; }
-    const u = URL.createObjectURL(editImageFile);
-    setEditImageUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [editImageFile]);
-
-  const displayUrl = editMode ? (editImageUrl || imgUrl) : imgUrl;
-
-  const toggleTag = (tag) => setEditTags((prev) =>
-    prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-  );
-
-  return { displayUrl, toggleTag };
 }
 
 // ─────────────────────────────────────────
@@ -310,13 +286,40 @@ export function DetailScreen({ record, onClose, records, tags }) {
   const headerTitle = category === 'diary' ? '活動日記' : category === 'bed' ? '畝の記録' : '野菜記録';
   const headerBg    = category === 'diary' ? COLORS.diaryBg : category === 'bed' ? COLORS.bedBg : COLORS.card;
 
-  // 編集中の新規追加画像プレビューURL（クリーンアップ）
+  // 新規追加画像のプレビューURL管理
+  // ファイル単位でURLをキャッシュし、追加時に既存URLを破棄しない
+  const newFileUrlMapRef = useRef(new Map()); // File → objectURL
   const [newImageUrls, setNewImageUrls] = useState([]);
+
   useEffect(() => {
-    const urls = newImageFiles.map((f) => URL.createObjectURL(f));
-    setNewImageUrls(urls);
-    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+    const fileSet = new Set(newImageFiles);
+
+    // 削除されたファイルのURLのみ revoke
+    for (const [file, url] of newFileUrlMapRef.current.entries()) {
+      if (!fileSet.has(file)) {
+        URL.revokeObjectURL(url);
+        newFileUrlMapRef.current.delete(file);
+      }
+    }
+
+    // 新しく追加されたファイルだけ URL を生成（既存ファイルは再生成しない）
+    for (const file of newImageFiles) {
+      if (!newFileUrlMapRef.current.has(file)) {
+        newFileUrlMapRef.current.set(file, URL.createObjectURL(file));
+      }
+    }
+
+    setNewImageUrls(newImageFiles.map((f) => newFileUrlMapRef.current.get(f)));
   }, [newImageFiles]);
+
+  // アンマウント時に残存URLをすべて解放
+  useEffect(() => {
+    return () => {
+      for (const url of newFileUrlMapRef.current.values()) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, []);
 
   const veggieTags  = tags.tags.野菜 ?? [];
   const placeTags   = tags.tags.場所 ?? [];
