@@ -1,22 +1,46 @@
 // src/components/AddScreen.jsx
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-// Exif から撮影日時を取得して { date: 'YYYY-MM-DD', time: 'HH:MM' } を返す
-// 取得できない場合は null を返す
-async function readExifDateTime(file) {
+// 画像ファイルから日時を取得して { date: 'YYYY-MM-DD', time: 'HH:MM' } を返す
+// ① exifr の DateTimeOriginal → ② File.lastModified → ③ null（今日の日付のまま）
+async function getDateTimeFromFile(file) {
+  // ① exifr で DateTimeOriginal を試みる
   try {
     const exifr = (await import('exifr')).default;
     const result = await exifr.parse(file, ['DateTimeOriginal']);
     const dt = result?.DateTimeOriginal;
-    if (!dt) return null;
-    const d = dt instanceof Date ? dt : new Date(dt);
-    if (isNaN(d.getTime())) return null;
-    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-    return { date, time };
-  } catch {
-    return null;
+    if (dt) {
+      const d = dt instanceof Date ? dt : new Date(dt);
+      if (!isNaN(d.getTime())) {
+        const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        console.log('[Exif] ① DateTimeOriginal (exifr):', date, time);
+        return { date, time };
+      }
+    }
+    console.log('[Exif] DateTimeOriginal が取得できなかった。File.lastModified を試みる…');
+  } catch (e) {
+    console.log('[Exif] exifr.parse() 失敗 (iOS等):', e.message, '→ File.lastModified を試みる…');
   }
+
+  // ② File.lastModified をフォールバックとして使用
+  if (file.lastModified) {
+    try {
+      const d = new Date(file.lastModified);
+      if (!isNaN(d.getTime())) {
+        const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        console.log('[Exif] ② File.lastModified フォールバック:', date, time);
+        return { date, time };
+      }
+    } catch (e) {
+      console.log('[Exif] File.lastModified も失敗:', e.message);
+    }
+  }
+
+  // ③ 今日の日付のまま
+  console.log('[Exif] ③ Exif・lastModified ともに取得不可。今日の日付を使用。');
+  return null;
 }
 
 const COLORS = {
@@ -388,8 +412,8 @@ export function AddScreen({ records, tags, onDone }) {
             if (mode === 'veggie') setImageFile(file);
             else addImageFiles([file]);
             e.target.value = '';
-            const exif = await readExifDateTime(file);
-            if (exif) { setDate(exif.date); setTime(exif.time); }
+            const dt = await getDateTimeFromFile(file);
+            if (dt) { setDate(dt.date); setTime(dt.time); }
           }}
         />
         <input
@@ -402,8 +426,8 @@ export function AddScreen({ records, tags, onDone }) {
             if (mode === 'veggie') setImageFile(files[0]);
             else addImageFiles(files);
             e.target.value = '';
-            const exif = await readExifDateTime(files[0]);
-            if (exif) { setDate(exif.date); setTime(exif.time); }
+            const dt = await getDateTimeFromFile(files[0]);
+            if (dt) { setDate(dt.date); setTime(dt.time); }
           }}
         />
 
