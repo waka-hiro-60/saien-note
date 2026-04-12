@@ -48,6 +48,33 @@ function getThumbBlob(record) {
   return (record.images ?? [])[0] ?? null;
 }
 
+// 記録の写真枚数を返す
+function getPhotoCount(record) {
+  const cat = record.category ?? 'veggie';
+  if (cat === 'veggie') {
+    if (record.images && record.images.length > 0) return record.images.length;
+    return record.imageBlob ? 1 : 0;
+  }
+  return (record.images ?? []).length;
+}
+
+// 写真枚数バッジ（2枚以上のときのみ表示）
+function PhotoCountBadge({ count }) {
+  if (count < 2) return null;
+  return (
+    <div style={{
+      position: 'absolute', bottom: 4, right: 4,
+      background: 'rgba(0,0,0,0.6)', color: '#fff',
+      fontSize: 14, borderRadius: 6,
+      padding: '2px 6px',
+      lineHeight: 1.4,
+      pointerEvents: 'none',
+    }}>
+      📷{count}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────
 // 画像コンポーネント
 // ─────────────────────────────────────────
@@ -80,6 +107,7 @@ function RecordImage({ blob, placeholder = '🌿', style = {} }) {
 
 function VeggieListCard({ record, onTap }) {
   const thumb = getThumbBlob(record);
+  const photoCount = getPhotoCount(record);
   return (
     <div
       onClick={() => onTap(record)}
@@ -99,6 +127,7 @@ function VeggieListCard({ record, onTap }) {
           position: 'absolute', top: 4, left: 4,
           fontSize: 16, lineHeight: 1,
         }}>🥬</span>
+        <PhotoCountBadge count={photoCount} />
       </div>
       <div style={{ flex: 1, padding: '10px 12px', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -139,6 +168,7 @@ function VeggieListCard({ record, onTap }) {
 
 function BedListCard({ record, onTap, veggieTags = [] }) {
   const thumb = getThumbBlob(record);
+  const photoCount = getPhotoCount(record);
   const associatedVeggies = (record.tags ?? []).filter((t) => veggieTags.includes(t));
   const otherTags         = (record.tags ?? []).filter((t) => !veggieTags.includes(t));
 
@@ -162,6 +192,7 @@ function BedListCard({ record, onTap, veggieTags = [] }) {
           position: 'absolute', top: 4, left: 4,
           fontSize: 16, lineHeight: 1,
         }}>🌱</span>
+        <PhotoCountBadge count={photoCount} />
       </div>
       <div style={{ flex: 1, padding: '10px 12px', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
@@ -198,6 +229,7 @@ function BedListCard({ record, onTap, veggieTags = [] }) {
 
 function DiaryListCard({ record, onTap }) {
   const thumb = getThumbBlob(record);
+  const photoCount = getPhotoCount(record);
   return (
     <div
       onClick={() => onTap(record)}
@@ -226,6 +258,7 @@ function DiaryListCard({ record, onTap }) {
           position: 'absolute', top: 4, left: 4,
           fontSize: 16, lineHeight: 1,
         }}>📔</span>
+        <PhotoCountBadge count={photoCount} />
       </div>
       <div style={{ flex: 1, padding: '10px 12px', minWidth: 0 }}>
         <div style={{ fontSize: 16, color: COLORS.textLight, marginBottom: 4 }}>{record.date}</div>
@@ -249,6 +282,7 @@ function DiaryListCard({ record, onTap }) {
 
 function GridCard({ record, onTap }) {
   const thumb = getThumbBlob(record);
+  const photoCount = getPhotoCount(record);
   const cat   = record.category ?? 'veggie';
   const icon  = cat === 'diary' ? '📔' : cat === 'bed' ? '🌱' : '🥬';
   const bg    = cat === 'diary' ? COLORS.diaryBg : cat === 'bed' ? COLORS.bedBg : COLORS.card;
@@ -288,6 +322,7 @@ function GridCard({ record, onTap }) {
             fontSize: 11, padding: '2px 6px', borderRadius: 10, fontWeight: 600,
           }}>公開</div>
         )}
+        <PhotoCountBadge count={photoCount} />
       </div>
       <div style={{ padding: '8px' }}>
         <div style={{ fontSize: 16, color: COLORS.textLight, marginBottom: 4 }}>{record.date}</div>
