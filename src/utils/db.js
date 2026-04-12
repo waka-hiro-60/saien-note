@@ -234,9 +234,12 @@ export async function updateRecord(id, updates) {
     let images = existing.images ?? [];
 
     if (newImagesArray !== undefined) {
-      // Blob[] 直接置き換え（UI上での削除後に渡す）
+      // Blob[] 直接置き換え（UI上での削除後に渡す）— addImageFiles と併用可能
       images = newImagesArray;
-    } else if (imageFiles && imageFiles.length > 0) {
+    }
+
+    if (imageFiles && imageFiles.length > 0) {
+      // ファイルで全画像を置き換え（newImagesArray より優先）
       const fileList = Array.from(imageFiles);
       images = [];
       console.log(`[updateRecord] imageFiles: ${fileList.length} 枚の画像を圧縮開始`);
@@ -251,6 +254,7 @@ export async function updateRecord(id, updates) {
         }
       }
     } else if (addImageFiles && addImageFiles.length > 0) {
+      // 既存（削除反映済み）配列に追記
       const fileList = Array.from(addImageFiles);
       console.log(`[updateRecord] addImageFiles: ${fileList.length} 枚の画像を圧縮開始`);
       for (let i = 0; i < fileList.length; i++) {

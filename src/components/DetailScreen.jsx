@@ -242,7 +242,9 @@ export function DetailScreen({ record, onClose, records, tags }) {
   };
 
   const handleAddNewImages = (files) => {
-    setNewImageFiles((prev) => [...prev, ...Array.from(files)]);
+    // FileList は input がリセットされると空になるので、先に配列へ変換する
+    const arr = Array.from(files);
+    setNewImageFiles((prev) => [...prev, ...arr]);
   };
 
   const handleRemoveNewImage = (index) => {
