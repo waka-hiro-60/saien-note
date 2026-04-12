@@ -197,9 +197,45 @@ export function DetailScreen({ record, onClose, records, tags }) {
     return () => URL.revokeObjectURL(u);
   }, [editImageFile]);
 
-  const toggleEditTag = (tag) => setEditTags((prev) =>
-    prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-  );
+  const toggleEditTag = (tag) => {
+    setEditTags((prev) => {
+      const isSelected = prev.includes(tag);
+      let next = isSelected ? prev.filter((t) => t !== tag) : [...prev, tag];
+
+      if (!isSelected) {
+        // ─── タグを追加するとき ───
+        if (veggieTags.includes(tag)) {
+          // 野菜を選択 → 対応する畝を自動ON
+          for (const [bed, veggies] of Object.entries(bedVeggieMap)) {
+            if (veggies.includes(tag) && !next.includes(bed)) {
+              next.push(bed);
+            }
+          }
+        } else if (placeTags.includes(tag)) {
+          // 新しい畝を選択 → 以前の畝の野菜をOFF、新しい畝の野菜をON
+          for (const bed of placeTags) {
+            if (bed !== tag && prev.includes(bed)) {
+              const oldVeggies = bedVeggieMap[bed] ?? [];
+              next = next.filter((t) => !oldVeggies.includes(t));
+            }
+          }
+          const linked = bedVeggieMap[tag] ?? [];
+          for (const v of linked) {
+            if (!next.includes(v)) next.push(v);
+          }
+        }
+      } else {
+        // ─── タグを削除するとき ───
+        if (placeTags.includes(tag)) {
+          // 畝をOFF → 対応する野菜もOFF
+          const linked = bedVeggieMap[tag] ?? [];
+          next = next.filter((t) => !linked.includes(t));
+        }
+      }
+
+      return next;
+    });
+  };
 
   const handleRemoveEditImage = (index) => {
     setEditImages((prev) => prev.filter((_, i) => i !== index));
@@ -280,7 +316,9 @@ export function DetailScreen({ record, onClose, records, tags }) {
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
   }, [newImageFiles]);
 
-  const veggieTags = tags.tags.野菜 ?? [];
+  const veggieTags  = tags.tags.野菜 ?? [];
+  const placeTags   = tags.tags.場所 ?? [];
+  const bedVeggieMap = tags.bedVeggieMap ?? {};
 
   return (
     <div style={{

@@ -297,7 +297,9 @@ export function AddScreen({ records, tags, onDone }) {
 
   // ─── bed/diary 複数画像操作 ───
   const addImageFiles = (files) => {
-    setImageFiles((prev) => [...prev, ...Array.from(files)]);
+    // FileList は input がリセットされると空になるので、先に配列へ変換する
+    const arr = Array.from(files);
+    setImageFiles((prev) => [...prev, ...arr]);
   };
 
   const removeImageFile = (index) => {
