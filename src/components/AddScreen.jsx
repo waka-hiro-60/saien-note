@@ -88,12 +88,16 @@ function MultiImagePreview({ files, onRemove, onAddCamera, onAddAlbum, cameraRef
   return (
     <div style={{ padding: 12, background: '#111' }}>
       {urls.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 6,
-          marginBottom: 10,
-        }}>
+        <>
+          <div style={{ color: '#ccc', fontSize: 15, marginBottom: 8, fontWeight: 600 }}>
+            写真 {files.length}枚
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 6,
+            marginBottom: 10,
+          }}>
           {urls.map((url, i) => (
             <div key={i} style={{ position: 'relative', paddingTop: '100%' }}>
               <img
@@ -118,7 +122,8 @@ function MultiImagePreview({ files, onRemove, onAddCamera, onAddAlbum, cameraRef
               >✕</button>
             </div>
           ))}
-        </div>
+          </div>
+        </>
       )}
 
       <div style={{ display: 'flex', gap: 10 }}>
@@ -413,11 +418,20 @@ export function AddScreen({ records, tags, onDone }) {
           onChange={async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            if (mode === 'veggie') setImageFile(file);
-            else addImageFiles([file]);
-            e.target.value = '';
-            const dt = await getDateTimeFromFile(file);
-            if (dt) { setDate(dt.date); setTime(dt.time); }
+            if (mode === 'veggie') {
+              setImageFile(file);
+              e.target.value = '';
+              const dt = await getDateTimeFromFile(file);
+              if (dt) { setDate(dt.date); setTime(dt.time); }
+            } else {
+              const isFirst = imageFiles.length === 0;
+              addImageFiles([file]);
+              e.target.value = '';
+              if (isFirst) {
+                const dt = await getDateTimeFromFile(file);
+                if (dt) { setDate(dt.date); setTime(dt.time); }
+              }
+            }
           }}
         />
         <input
@@ -427,11 +441,20 @@ export function AddScreen({ records, tags, onDone }) {
           onChange={async (e) => {
             const files = e.target.files;
             if (!files || files.length === 0) return;
-            if (mode === 'veggie') setImageFile(files[0]);
-            else addImageFiles(files);
-            e.target.value = '';
-            const dt = await getDateTimeFromFile(files[0]);
-            if (dt) { setDate(dt.date); setTime(dt.time); }
+            if (mode === 'veggie') {
+              setImageFile(files[0]);
+              e.target.value = '';
+              const dt = await getDateTimeFromFile(files[0]);
+              if (dt) { setDate(dt.date); setTime(dt.time); }
+            } else {
+              const isFirst = imageFiles.length === 0;
+              addImageFiles(files);
+              e.target.value = '';
+              if (isFirst) {
+                const dt = await getDateTimeFromFile(files[0]);
+                if (dt) { setDate(dt.date); setTime(dt.time); }
+              }
+            }
           }}
         />
 
