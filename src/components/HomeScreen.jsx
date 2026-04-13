@@ -1,5 +1,5 @@
 // src/components/HomeScreen.jsx
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { DetailScreen } from './DetailScreen';
 
 const COLORS = {
@@ -18,10 +18,6 @@ const COLORS = {
   bedBg:        '#F0F5F0',
 };
 
-// ─────────────────────────────────────────
-// ユーティリティ
-// ─────────────────────────────────────────
-
 function formatDateHeader(dateStr) {
   if (!dateStr || dateStr === '日付不明') return '日付不明';
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -36,45 +32,40 @@ function formatShortDate(dateStr) {
   return `${m}/${d}`;
 }
 
+// 日付＋時刻を表示（時刻がある場合は "YYYY-MM-DD HH:MM"）
+function formatDateTime(date, time) {
+  if (!date) return '';
+  return time ? `${date} ${time}` : date;
+}
+
 function getCategoryOrder(category) {
   if (category === 'diary') return 0;
   if (category === 'bed')   return 1;
-  return 2; // veggie
+  return 2;
 }
 
-// 記録のサムネイルSrcを返す（Base64文字列）
 function getThumbBlob(record) {
   if ((record.category ?? 'veggie') === 'veggie') return record.imageBase64 ?? null;
   return (record.imageBase64s ?? [])[0] ?? null;
 }
 
-// 記録の写真枚数を返す
 function getPhotoCount(record) {
   const cat = record.category ?? 'veggie';
   if (cat === 'veggie') return record.imageBase64 ? 1 : 0;
   return (record.imageBase64s ?? []).length;
 }
 
-// 写真枚数バッジ（2枚以上のときのみ表示）
 function PhotoCountBadge({ count }) {
   if (count < 2) return null;
   return (
     <div style={{
       position: 'absolute', bottom: 4, right: 4,
       background: 'rgba(0,0,0,0.6)', color: '#fff',
-      fontSize: 14, borderRadius: 6,
-      padding: '2px 6px',
-      lineHeight: 1.4,
-      pointerEvents: 'none',
-    }}>
-      📷{count}
-    </div>
+      fontSize: 14, borderRadius: 6, padding: '2px 6px',
+      lineHeight: 1.4, pointerEvents: 'none',
+    }}>📷{count}</div>
   );
 }
-
-// ─────────────────────────────────────────
-// 画像コンポーネント
-// ─────────────────────────────────────────
 
 function RecordImage({ blob: src, placeholder = '🌿', style = {} }) {
   if (!src) {
@@ -82,45 +73,33 @@ function RecordImage({ blob: src, placeholder = '🌿', style = {} }) {
       <div style={{
         width: '100%', height: '100%',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: '#E5E0D8', color: COLORS.textLight, fontSize: 28,
-        ...style,
+        background: '#E5E0D8', color: COLORS.textLight, fontSize: 28, ...style,
       }}>{placeholder}</div>
     );
   }
   return <img src={src} alt="記録" style={{ width: '100%', height: '100%', objectFit: 'cover', ...style }} />;
 }
 
-// ─────────────────────────────────────────
-// 野菜カード
-// ─────────────────────────────────────────
-
+// ─── 野菜カード ───
 function VeggieListCard({ record, onTap }) {
   const thumb = getThumbBlob(record);
   const photoCount = getPhotoCount(record);
   return (
-    <div
-      onClick={() => onTap(record)}
-      style={{
-        background: COLORS.card,
-        borderRadius: 12,
-        overflow: 'hidden',
-        cursor: 'pointer',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-        display: 'flex',
-        minHeight: 80,
-      }}
-    >
+    <div onClick={() => onTap(record)} style={{
+      background: COLORS.card, borderRadius: 12, overflow: 'hidden',
+      cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+      display: 'flex', minHeight: 80,
+    }}>
       <div style={{ width: 80, height: 80, flexShrink: 0, position: 'relative' }}>
         <RecordImage blob={thumb} placeholder="🥬" />
-        <span style={{
-          position: 'absolute', top: 4, left: 4,
-          fontSize: 16, lineHeight: 1,
-        }}>🥬</span>
+        <span style={{ position: 'absolute', top: 4, left: 4, fontSize: 16, lineHeight: 1 }}>🥬</span>
         <PhotoCountBadge count={photoCount} />
       </div>
       <div style={{ flex: 1, padding: '10px 12px', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span style={{ fontSize: 16, color: COLORS.textLight }}>{record.date}</span>
+          <span style={{ fontSize: 16, color: COLORS.textLight }}>
+            {formatDateTime(record.date, record.time)}
+          </span>
           {record.published && (
             <span style={{
               background: COLORS.accent, color: '#fff',
@@ -131,8 +110,7 @@ function VeggieListCard({ record, onTap }) {
         {record.comment && (
           <div style={{
             fontSize: 18, color: COLORS.text, lineHeight: 1.5,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            marginBottom: 4,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4,
           }}>{record.comment}</div>
         )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -151,47 +129,31 @@ function VeggieListCard({ record, onTap }) {
   );
 }
 
-// ─────────────────────────────────────────
-// 畝カード
-// ─────────────────────────────────────────
-
+// ─── 畝カード ───
 function BedListCard({ record, onTap, veggieTags = [] }) {
   const thumb = getThumbBlob(record);
   const photoCount = getPhotoCount(record);
   const associatedVeggies = (record.tags ?? []).filter((t) => veggieTags.includes(t));
   const otherTags         = (record.tags ?? []).filter((t) => !veggieTags.includes(t));
-
   return (
-    <div
-      onClick={() => onTap(record)}
-      style={{
-        background: COLORS.bedBg,
-        borderRadius: 12,
-        overflow: 'hidden',
-        cursor: 'pointer',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-        display: 'flex',
-        minHeight: 80,
-        border: `1px solid #D0E4D0`,
-      }}
-    >
+    <div onClick={() => onTap(record)} style={{
+      background: COLORS.bedBg, borderRadius: 12, overflow: 'hidden',
+      cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+      display: 'flex', minHeight: 80, border: `1px solid #D0E4D0`,
+    }}>
       <div style={{ width: 80, height: 80, flexShrink: 0, position: 'relative' }}>
         <RecordImage blob={thumb} placeholder="🌱" />
-        <span style={{
-          position: 'absolute', top: 4, left: 4,
-          fontSize: 16, lineHeight: 1,
-        }}>🌱</span>
+        <span style={{ position: 'absolute', top: 4, left: 4, fontSize: 16, lineHeight: 1 }}>🌱</span>
         <PhotoCountBadge count={photoCount} />
       </div>
       <div style={{ flex: 1, padding: '10px 12px', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-          <span style={{ fontSize: 16, color: COLORS.textLight }}>{record.date}</span>
+        <div style={{ fontSize: 16, color: COLORS.textLight, marginBottom: 2 }}>
+          {formatDateTime(record.date, record.time)}
         </div>
         {record.comment && (
           <div style={{
             fontSize: 18, color: COLORS.text, lineHeight: 1.5,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            marginBottom: 4,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4,
           }}>{record.comment}</div>
         )}
         {associatedVeggies.length > 0 && (
@@ -212,27 +174,16 @@ function BedListCard({ record, onTap, veggieTags = [] }) {
   );
 }
 
-// ─────────────────────────────────────────
-// 日記カード
-// ─────────────────────────────────────────
-
+// ─── 日記カード ───
 function DiaryListCard({ record, onTap }) {
   const thumb = getThumbBlob(record);
   const photoCount = getPhotoCount(record);
   return (
-    <div
-      onClick={() => onTap(record)}
-      style={{
-        background: COLORS.diaryBg,
-        borderRadius: 12,
-        overflow: 'hidden',
-        cursor: 'pointer',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-        display: 'flex',
-        minHeight: 80,
-        border: `1px solid #F0DFC0`,
-      }}
-    >
+    <div onClick={() => onTap(record)} style={{
+      background: COLORS.diaryBg, borderRadius: 12, overflow: 'hidden',
+      cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+      display: 'flex', minHeight: 80, border: `1px solid #F0DFC0`,
+    }}>
       <div style={{ width: 80, height: 80, flexShrink: 0, position: 'relative' }}>
         {thumb ? (
           <RecordImage blob={thumb} placeholder="📔" />
@@ -243,21 +194,18 @@ function DiaryListCard({ record, onTap }) {
             background: '#F0DFC0', fontSize: 32,
           }}>📔</div>
         )}
-        <span style={{
-          position: 'absolute', top: 4, left: 4,
-          fontSize: 16, lineHeight: 1,
-        }}>📔</span>
+        <span style={{ position: 'absolute', top: 4, left: 4, fontSize: 16, lineHeight: 1 }}>📔</span>
         <PhotoCountBadge count={photoCount} />
       </div>
       <div style={{ flex: 1, padding: '10px 12px', minWidth: 0 }}>
-        <div style={{ fontSize: 16, color: COLORS.textLight, marginBottom: 4 }}>{record.date}</div>
+        <div style={{ fontSize: 16, color: COLORS.textLight, marginBottom: 4 }}>
+          {formatDateTime(record.date, record.time)}
+        </div>
         {record.text && (
           <div style={{
             fontSize: 18, color: COLORS.text, lineHeight: 1.6,
             overflow: 'hidden',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
           }}>{record.text}</div>
         )}
       </div>
@@ -265,28 +213,18 @@ function DiaryListCard({ record, onTap }) {
   );
 }
 
-// ─────────────────────────────────────────
-// グリッドカード（全カテゴリ共通）
-// ─────────────────────────────────────────
-
+// ─── グリッドカード ───
 function GridCard({ record, onTap }) {
   const thumb = getThumbBlob(record);
   const photoCount = getPhotoCount(record);
-  const cat   = record.category ?? 'veggie';
-  const icon  = cat === 'diary' ? '📔' : cat === 'bed' ? '🌱' : '🥬';
-  const bg    = cat === 'diary' ? COLORS.diaryBg : cat === 'bed' ? COLORS.bedBg : COLORS.card;
-
+  const cat  = record.category ?? 'veggie';
+  const icon = cat === 'diary' ? '📔' : cat === 'bed' ? '🌱' : '🥬';
+  const bg   = cat === 'diary' ? COLORS.diaryBg : cat === 'bed' ? COLORS.bedBg : COLORS.card;
   return (
-    <div
-      onClick={() => onTap(record)}
-      style={{
-        background: bg,
-        borderRadius: 12,
-        overflow: 'hidden',
-        cursor: 'pointer',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-      }}
-    >
+    <div onClick={() => onTap(record)} style={{
+      background: bg, borderRadius: 12, overflow: 'hidden',
+      cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+    }}>
       <div style={{ paddingTop: '100%', position: 'relative' }}>
         <div style={{ position: 'absolute', inset: 0 }}>
           {thumb ? (
@@ -300,10 +238,7 @@ function GridCard({ record, onTap }) {
             }}>{icon}</div>
           )}
         </div>
-        <span style={{
-          position: 'absolute', top: 6, left: 6,
-          fontSize: 18, lineHeight: 1,
-        }}>{icon}</span>
+        <span style={{ position: 'absolute', top: 6, left: 6, fontSize: 18, lineHeight: 1 }}>{icon}</span>
         {record.published && (
           <div style={{
             position: 'absolute', top: 6, right: 6,
@@ -314,7 +249,9 @@ function GridCard({ record, onTap }) {
         <PhotoCountBadge count={photoCount} />
       </div>
       <div style={{ padding: '8px' }}>
-        <div style={{ fontSize: 16, color: COLORS.textLight, marginBottom: 4 }}>{record.date}</div>
+        <div style={{ fontSize: 14, color: COLORS.textLight, marginBottom: 4 }}>
+          {formatDateTime(record.date, record.time)}
+        </div>
         {cat === 'diary' ? (
           <div style={{
             fontSize: 16, color: COLORS.text,
@@ -335,51 +272,36 @@ function GridCard({ record, onTap }) {
   );
 }
 
-// ─────────────────────────────────────────
-// 「去年のこの頃」カード
-// ─────────────────────────────────────────
-
+// ─── 去年のこの頃カード ───
 function LastYearCard({ records, onShowAll }) {
   if (!records || records.length === 0) return null;
-
   const today    = new Date();
   const lastYear = today.getFullYear() - 1;
   const month    = today.getMonth() + 1;
-
-  const preview = records.slice(0, 3);
-
+  const preview  = records.slice(0, 3);
   return (
     <div style={{
-      background: '#FFFBF0',
-      border: `1px solid ${COLORS.accent}`,
-      borderRadius: 12,
-      padding: '12px 14px',
-      marginBottom: 12,
+      background: '#FFFBF0', border: `1px solid ${COLORS.accent}`,
+      borderRadius: 12, padding: '12px 14px', marginBottom: 12,
       boxShadow: '0 1px 4px rgba(200,169,110,0.15)',
     }}>
-      <div style={{
-        fontSize: 16, fontWeight: 700, color: COLORS.accent, marginBottom: 10,
-      }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.accent, marginBottom: 10 }}>
         🗓️ 去年のこの頃（{lastYear}年{month}月）
       </div>
-
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {preview.map((r) => {
           const cat  = r.category ?? 'veggie';
           const icon = cat === 'diary' ? '📔' : cat === 'bed' ? '🌱' : '🥬';
           const text = r.text || r.comment || '';
           return (
-            <div key={r.id} style={{
-              display: 'flex', gap: 8, alignItems: 'flex-start',
-            }}>
+            <div key={r.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
               <span style={{ fontSize: 16, color: COLORS.textLight, flexShrink: 0, minWidth: 40 }}>
                 {formatShortDate(r.date)}
               </span>
               <span style={{ fontSize: 18 }}>{icon}</span>
               <span style={{
                 fontSize: 18, color: COLORS.text, lineHeight: 1.4,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                flex: 1,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
               }}>
                 {text.slice(0, 24) || (r.tags ?? []).join('・')}
               </span>
@@ -387,43 +309,27 @@ function LastYearCard({ records, onShowAll }) {
           );
         })}
       </div>
-
-      <button
-        onClick={onShowAll}
-        style={{
-          marginTop: 10,
-          padding: '10px 0',
-          width: '100%',
-          border: 'none',
-          background: 'transparent',
-          color: COLORS.accent,
-          fontSize: 16,
-          fontWeight: 600,
-          cursor: 'pointer',
-          textAlign: 'right',
-        }}
-      >
-        → 詳しく見る
-      </button>
+      <button onClick={onShowAll} style={{
+        marginTop: 10, padding: '10px 0', width: '100%',
+        border: 'none', background: 'transparent',
+        color: COLORS.accent, fontSize: 16, fontWeight: 600,
+        cursor: 'pointer', textAlign: 'right',
+      }}>→ 詳しく見る</button>
     </div>
   );
 }
 
-// ─────────────────────────────────────────
-// HomeScreen
-// ─────────────────────────────────────────
-
+// ─── HomeScreen ───
 export function HomeScreen({ records, tags }) {
-  const [viewMode,        setViewMode]        = useState('list');
-  const [keyword,         setKeyword]         = useState('');
-  const [selectedTags,    setSelectedTags]    = useState([]);
-  const [showArchived,    setShowArchived]    = useState(false);
-  const [selectedRecord,  setSelectedRecord]  = useState(null);
-  const [showLastYear,    setShowLastYear]    = useState(false);
+  const [viewMode,       setViewMode]       = useState('list');
+  const [keyword,        setKeyword]        = useState('');
+  const [selectedTags,   setSelectedTags]   = useState([]);
+  const [showArchived,   setShowArchived]   = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [showLastYear,   setShowLastYear]   = useState(false);
 
   const { loading, error, searchAndFilter, getRecordsInDateRange, reload } = records;
 
-  // ─── 去年のこの頃 ───
   const lastYearRecords = useMemo(() => {
     const today  = new Date();
     const lYear  = today.getFullYear() - 1;
@@ -450,7 +356,6 @@ export function HomeScreen({ records, tags }) {
     return end.toISOString().slice(0, 10);
   }, []);
 
-  // ─── フィルタリング ───
   const filtered = useMemo(() => {
     let result = searchAndFilter(keyword, selectedTags);
     if (!showArchived) result = result.filter((r) => !r.archived);
@@ -460,7 +365,6 @@ export function HomeScreen({ records, tags }) {
     return result;
   }, [searchAndFilter, keyword, selectedTags, showArchived, showLastYear, lastYearStartDate, lastYearEndDate]);
 
-  // ─── 日付グループ化 ───
   const groupedByDate = useMemo(() => {
     const groups = {};
     for (const r of filtered) {
@@ -468,9 +372,7 @@ export function HomeScreen({ records, tags }) {
       if (!groups[date]) groups[date] = [];
       groups[date].push(r);
     }
-    // 日付降順
     const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
-    // 各日内でdiary→bed→veggieの順
     for (const date of sortedDates) {
       groups[date].sort((a, b) =>
         getCategoryOrder(a.category ?? 'veggie') - getCategoryOrder(b.category ?? 'veggie')
@@ -480,9 +382,7 @@ export function HomeScreen({ records, tags }) {
   }, [filtered]);
 
   const toggleFilterTag = (tag) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
+    setSelectedTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
   };
 
   const allTags    = tags.allTagsFlat ?? [];
@@ -501,112 +401,75 @@ export function HomeScreen({ records, tags }) {
       {/* ヘッダー */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 16px 10px',
-        background: COLORS.card,
-        borderBottom: `1px solid ${COLORS.border}`,
-        flexShrink: 0,
+        padding: '14px 16px 10px', background: COLORS.card,
+        borderBottom: `1px solid ${COLORS.border}`, flexShrink: 0,
       }}>
-        <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.primary }}>
-          🌱 自給菜園ノート
-        </span>
+        <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.primary }}>🌱 自給菜園ノート</span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button
-            onClick={() => setShowArchived((v) => !v)}
-            style={{
-              padding: '8px 12px', borderRadius: 8, minHeight: 44,
-              border: `1px solid ${COLORS.border}`,
-              background: showArchived ? COLORS.primaryLight : COLORS.card,
-              color: showArchived ? COLORS.primary : COLORS.textLight,
-              fontSize: 16, cursor: 'pointer',
-            }}
-          >📦</button>
-          <button
-            onClick={() => setViewMode('list')}
-            style={{
-              width: 44, height: 44, borderRadius: 8, minHeight: 44,
-              border: `1px solid ${COLORS.border}`,
-              background: viewMode === 'list' ? COLORS.primaryLight : COLORS.card,
-              color: viewMode === 'list' ? COLORS.primary : COLORS.textLight,
-              cursor: 'pointer', fontSize: 18,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >☰</button>
-          <button
-            onClick={() => setViewMode('grid')}
-            style={{
-              width: 44, height: 44, borderRadius: 8, minHeight: 44,
-              border: `1px solid ${COLORS.border}`,
-              background: viewMode === 'grid' ? COLORS.primaryLight : COLORS.card,
-              color: viewMode === 'grid' ? COLORS.primary : COLORS.textLight,
-              cursor: 'pointer', fontSize: 18,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >⊞</button>
+          <button onClick={() => setShowArchived((v) => !v)} style={{
+            padding: '8px 12px', borderRadius: 8, minHeight: 44,
+            border: `1px solid ${COLORS.border}`,
+            background: showArchived ? COLORS.primaryLight : COLORS.card,
+            color: showArchived ? COLORS.primary : COLORS.textLight,
+            fontSize: 16, cursor: 'pointer',
+          }}>📦</button>
+          <button onClick={() => setViewMode('list')} style={{
+            width: 44, height: 44, borderRadius: 8, minHeight: 44,
+            border: `1px solid ${COLORS.border}`,
+            background: viewMode === 'list' ? COLORS.primaryLight : COLORS.card,
+            color: viewMode === 'list' ? COLORS.primary : COLORS.textLight,
+            cursor: 'pointer', fontSize: 18,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>☰</button>
+          <button onClick={() => setViewMode('grid')} style={{
+            width: 44, height: 44, borderRadius: 8, minHeight: 44,
+            border: `1px solid ${COLORS.border}`,
+            background: viewMode === 'grid' ? COLORS.primaryLight : COLORS.card,
+            color: viewMode === 'grid' ? COLORS.primary : COLORS.textLight,
+            cursor: 'pointer', fontSize: 18,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>⊞</button>
         </div>
       </div>
 
       {/* 検索バー */}
       <div style={{
-        padding: '8px 16px 0',
-        background: COLORS.card,
-        flexShrink: 0,
-        borderBottom: `1px solid ${COLORS.border}`,
+        padding: '8px 16px 0', background: COLORS.card,
+        flexShrink: 0, borderBottom: `1px solid ${COLORS.border}`,
       }}>
-        <input
-          type="search"
-          placeholder="キーワードで検索…"
-          value={keyword}
+        <input type="search" placeholder="キーワードで検索…" value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           style={{
             width: '100%', padding: '12px', borderRadius: 8,
             border: `1px solid ${COLORS.border}`, fontSize: 18,
             background: COLORS.bg, color: COLORS.text,
             outline: 'none', boxSizing: 'border-box',
-          }}
-        />
+          }} />
         {allTags.length > 0 && (
-          <div style={{
-            display: 'flex', gap: 6, overflowX: 'auto',
-            padding: '8px 0', scrollbarWidth: 'none',
-          }}>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '8px 0', scrollbarWidth: 'none' }}>
             {allTags.map((tag) => {
               const active = selectedTags.includes(tag);
               return (
-                <button
-                  key={tag}
-                  onClick={() => toggleFilterTag(tag)}
-                  style={{
-                    flexShrink: 0,
-                    padding: '8px 14px', borderRadius: 20,
-                    border: `2px solid ${active ? COLORS.primary : COLORS.border}`,
-                    background: active ? COLORS.primaryLight : COLORS.card,
-                    color: active ? COLORS.tagText : COLORS.textLight,
-                    fontSize: 16, cursor: 'pointer',
-                    whiteSpace: 'nowrap', minHeight: 44,
-                    fontWeight: active ? 700 : 400,
-                  }}
-                >{tag}</button>
+                <button key={tag} onClick={() => toggleFilterTag(tag)} style={{
+                  flexShrink: 0, padding: '8px 14px', borderRadius: 20,
+                  border: `2px solid ${active ? COLORS.primary : COLORS.border}`,
+                  background: active ? COLORS.primaryLight : COLORS.card,
+                  color: active ? COLORS.tagText : COLORS.textLight,
+                  fontSize: 16, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 44,
+                  fontWeight: active ? 700 : 400,
+                }}>{tag}</button>
               );
             })}
           </div>
         )}
         {showLastYear && (
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '6px 4px 8px',
-          }}>
-            <span style={{ fontSize: 16, color: COLORS.accent, fontWeight: 600 }}>
-              🗓️ 去年のこの頃を表示中
-            </span>
-            <button
-              onClick={() => setShowLastYear(false)}
-              style={{
-                padding: '6px 12px', borderRadius: 8,
-                border: `1px solid ${COLORS.border}`,
-                background: COLORS.card, color: COLORS.textLight,
-                fontSize: 14, cursor: 'pointer',
-              }}
-            >解除</button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 4px 8px' }}>
+            <span style={{ fontSize: 16, color: COLORS.accent, fontWeight: 600 }}>🗓️ 去年のこの頃を表示中</span>
+            <button onClick={() => setShowLastYear(false)} style={{
+              padding: '6px 12px', borderRadius: 8,
+              border: `1px solid ${COLORS.border}`,
+              background: COLORS.card, color: COLORS.textLight, fontSize: 14, cursor: 'pointer',
+            }}>解除</button>
           </div>
         )}
       </div>
@@ -614,52 +477,34 @@ export function HomeScreen({ records, tags }) {
       {/* コンテンツ */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
         {error && (
-          <div style={{
-            padding: 12, borderRadius: 8, background: '#FEE', color: '#C00',
-            fontSize: 16, marginBottom: 12,
-          }}>エラー: {error}</div>
+          <div style={{ padding: 12, borderRadius: 8, background: '#FEE', color: '#C00', fontSize: 16, marginBottom: 12 }}>
+            エラー: {error}
+          </div>
         )}
-
         {loading ? (
-          <div style={{
-            display: 'flex', justifyContent: 'center', alignItems: 'center',
-            height: 200, color: COLORS.textLight, fontSize: 24,
-          }}>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200, color: COLORS.textLight }}>
             <div style={{
               width: 32, height: 32, border: `3px solid ${COLORS.border}`,
-              borderTop: `3px solid ${COLORS.primary}`,
-              borderRadius: '50%',
+              borderTop: `3px solid ${COLORS.primary}`, borderRadius: '50%',
               animation: 'spin 0.8s linear infinite',
             }} />
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         ) : (
           <>
-            {/* 去年のこの頃カード（最上部・記録が0件または1年目は非表示） */}
             {!showLastYear && lastYearRecords.length > 0 && (
-              <LastYearCard
-                records={lastYearRecords}
-                onShowAll={() => setShowLastYear(true)}
-              />
+              <LastYearCard records={lastYearRecords} onShowAll={() => setShowLastYear(true)} />
             )}
-
             {filtered.length === 0 ? (
-              <div style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                padding: '60px 20px', color: COLORS.textLight, gap: 12,
-              }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', color: COLORS.textLight, gap: 12 }}>
                 <span style={{ fontSize: 48 }}>🌱</span>
                 <span style={{ fontSize: 18 }}>記録がありません</span>
                 <span style={{ fontSize: 16 }}>「追加」タブから記録を始めましょう</span>
               </div>
             ) : viewMode === 'grid' ? (
-              // グリッドモード: 日付グループ内で2列
               groupedByDate.sortedDates.map((date) => (
                 <div key={date} style={{ marginBottom: 16 }}>
-                  <div style={{
-                    fontSize: 16, fontWeight: 700, color: COLORS.primary,
-                    marginBottom: 8, paddingLeft: 2,
-                  }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.primary, marginBottom: 8, paddingLeft: 2 }}>
                     {formatDateHeader(date)}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -668,14 +513,11 @@ export function HomeScreen({ records, tags }) {
                 </div>
               ))
             ) : (
-              // リストモード: 日付グループ表示
               groupedByDate.sortedDates.map((date) => (
                 <div key={date} style={{ marginBottom: 20 }}>
                   <div style={{
                     fontSize: 16, fontWeight: 700, color: COLORS.primary,
-                    marginBottom: 8, paddingLeft: 2,
-                    borderLeft: `3px solid ${COLORS.primary}`,
-                    paddingLeft: 8,
+                    marginBottom: 8, borderLeft: `3px solid ${COLORS.primary}`, paddingLeft: 8,
                   }}>
                     {formatDateHeader(date)}
                   </div>
