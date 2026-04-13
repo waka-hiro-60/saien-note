@@ -189,6 +189,7 @@ export function DetailScreen({ record, onClose, records, tags }) {
 
   const cameraRef = useRef();
   const albumRef  = useRef();
+  const editInitRef = useRef(false); // 編集モード初期化フラグ
 
   // ─── 写真管理（base64一元管理） ───────────────────────
   //
@@ -230,6 +231,10 @@ export function DetailScreen({ record, onClose, records, tags }) {
   useEffect(() => {
     if (!editMode || category === 'veggie') return;
 
+    // editModeがtrueになった瞬間だけ初期化（それ以外は無視）
+    if (editInitRef.current) return;
+    editInitRef.current = true;
+
     // 新フォーマット: imageBase64s（文字列配列）
     if (record.imageBase64s) {
       setAllImageBase64([...record.imageBase64s]);
@@ -243,7 +248,7 @@ export function DetailScreen({ record, onClose, records, tags }) {
       if (!cancelled) setAllImageBase64(results.filter(Boolean));
     });
     return () => { cancelled = true; };
-  }, [editMode, record.imageBase64s, record.images, category]);
+  }, [editMode, category]);
 
   // 写真追加（bed/diary）: compressImageでBase64化してから追記
   const handleAddImages = async (files, inputRef) => {
@@ -323,6 +328,7 @@ export function DetailScreen({ record, onClose, records, tags }) {
       }
 
       await records.update(record.id, updates);
+      editInitRef.current = false;
       setEditMode(false);
       setEditImageFile(null);
       setAllImageBase64([]);
@@ -336,6 +342,7 @@ export function DetailScreen({ record, onClose, records, tags }) {
 
   // ─── キャンセル ───
   const handleCancel = () => {
+    editInitRef.current = false;
     setEditMode(false);
     setEditImageFile(null);
     setAllImageBase64([]);
