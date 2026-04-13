@@ -1,5 +1,6 @@
 // src/components/DetailScreen.jsx
 import { useState, useEffect, useRef } from 'react';
+import { compressImage } from '../utils/db';
 
 const COLORS = {
   bg:           '#F7F5F0',
@@ -244,13 +245,18 @@ export function DetailScreen({ record, onClose, records, tags }) {
     return () => { cancelled = true; };
   }, [editMode, record.imageBase64s, record.images, category]);
 
-  // 写真追加（bed/diary）: FileReader で base64 化してから追記
-  const handleAddImages = (files) => {
-    Array.from(files).forEach((file) => {
-      blobToBase64(file).then((base64) => {
+  // 写真追加（bed/diary）: compressImageでBase64化してから追記
+  const handleAddImages = async (files, inputRef) => {
+    const arr = Array.from(files);
+    if (inputRef?.current) inputRef.current.value = '';
+    for (const file of arr) {
+      try {
+        const base64 = await compressImage(file);
         if (base64) setAllImageBase64((prev) => [...prev, base64]);
-      });
-    });
+      } catch (e) {
+        console.warn('写真追加失敗:', e);
+      }
+    }
   };
 
   // 写真削除（bed/diary）
@@ -476,9 +482,9 @@ export function DetailScreen({ record, onClose, records, tags }) {
                   <button onClick={() => cameraRef.current?.click()} style={editImgBtnStyle}>📷 追加（カメラ）</button>
                   <button onClick={() => albumRef.current?.click()} style={editImgBtnStyle}>🖼️ 追加（アルバム）</button>
                   <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple
-                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files)} />
+                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files, cameraRef)} />
                   <input ref={albumRef} type="file" accept="image/*" multiple
-                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files)} />
+                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files, albumRef)} />
                 </div>
               </div>
             )}
@@ -524,9 +530,9 @@ export function DetailScreen({ record, onClose, records, tags }) {
                   <button onClick={() => cameraRef.current?.click()} style={editImgBtnStyle}>📷 追加</button>
                   <button onClick={() => albumRef.current?.click()} style={editImgBtnStyle}>🖼️ 追加</button>
                   <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple
-                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files)} />
+                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files, cameraRef)} />
                   <input ref={albumRef} type="file" accept="image/*" multiple
-                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files)} />
+                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files, albumRef)} />
                 </div>
               </div>
             )}
