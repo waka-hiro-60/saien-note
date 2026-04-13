@@ -1,16 +1,10 @@
 // src/utils/db.js
 import { get, set, del, keys, createStore } from 'idb-keyval';
 
-// ─────────────────────────────────────────
-// ストア定義（3つ）
-// ─────────────────────────────────────────
 export const recordsStore  = createStore('saien-note-records',  'records');
 export const tagsStore     = createStore('saien-note-tags',     'tags');
 export const settingsStore = createStore('saien-note-settings', 'settings');
 
-// ─────────────────────────────────────────
-// タグ初期データ
-// ─────────────────────────────────────────
 export const DEFAULT_TAGS = {
   野菜: [
     'トマト（大玉）', 'トマト（中玉）', 'トマト（ミニ）',
@@ -20,192 +14,88 @@ export const DEFAULT_TAGS = {
     'サツマイモ', 'エダマメ', 'ソラマメ', '小松菜',
     'ネギ', 'ニラ', 'サンチュ', 'サニーレタス',
   ],
-  状態: [
-    '土準備', '畝づくり', 'マルチ張', '種まき',
-    '定植', '肥料', '水やり', '剪定', '収穫',
-  ],
+  状態: ['土準備', '畝づくり', 'マルチ張', '種まき', '定植', '肥料', '水やり', '剪定', '収穫'],
   場所: ['畝1', '畝2', '畝3', '畝4', '畝5'],
 };
 
-// ─────────────────────────────────────────
-// 画像圧縮ユーティリティ
-// 長辺1920px・品質80%に圧縮してBlobを返す
-// ─────────────────────────────────────────
+// FileReader経由で読み込み toDataURL で変換（iOS Safari対応）
 export async function compressImage(file) {
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-
-    img.onload = () => {
-      const MAX = 1920;
-      let { width, height } = img;
-
-      if (width > MAX || height > MAX) {
-        if (width >= height) {
-          height = Math.round((height * MAX) / width);
-          width  = MAX;
-        } else {
-          width  = Math.round((width * MAX) / height);
-          height = MAX;
-        }
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width  = width;
-      canvas.height = height;
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        URL.revokeObjectURL(url);
-        reject(new Error('canvas.getContext に失敗しました'));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, width, height);
-
-      // toBlob を試みる（iOS Safari では null になることがある）
-      try {
-        canvas.toBlob(
-          (blob) => {
-            URL.revokeObjectURL(url);
-            if (blob) {
-              resolve(blob);
-            } else {
-              // フォールバック: toDataURL → Blob変換
-              try {
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                const bin = atob(dataUrl.split(',')[1]);
-                const arr = new Uint8Array(bin.length);
-                for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-                resolve(new Blob([arr], { type: 'image/jpeg' }));
-              } catch (e2) {
-                reject(new Error('画像の圧縮に失敗しました'));
-              }
-            }
-          },
-          'image/jpeg',
-          0.8,
-        );
-      } catch {
-        // toBlob自体が例外を投げた場合もフォールバック
-        URL.revokeObjectURL(url);
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('画像の読み込みに失敗しました'));
+      img.onload = () => {
         try {
+          const MAX = 1920;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width >= height) { height = Math.round((height * MAX) / width); width = MAX; }
+            else { width = Math.round((width * MAX) / height); height = MAX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('canvasの取得に失敗しました')); return; }
+          ctx.drawImage(img, 0, 0, width, height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-          const bin = atob(dataUrl.split(',')[1]);
+          if (!dataUrl || dataUrl === 'data:,') { reject(new Error('画像の変換に失敗しました')); return; }
+          const parts = dataUrl.split(',');
+          if (parts.length < 2) { reject(new Error('画像データの解析に失敗しました')); return; }
+          const bin = atob(parts[1]);
           const arr = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
           resolve(new Blob([arr], { type: 'image/jpeg' }));
-        } catch (e2) {
-          reject(new Error('画像の圧縮に失敗しました'));
+        } catch (err) {
+          reject(new Error('画像の圧縮に失敗しました: ' + err.message));
         }
-      }
+      };
+      img.src = e.target.result;
     };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('画像の読み込みに失敗しました'));
-    };
-
-    img.src = url;
+    reader.readAsDataURL(file);
   });
 }
-
-// ─────────────────────────────────────────
-// Records CRUD
-// ─────────────────────────────────────────
 
 export async function getAllRecords() {
   const allKeys = await keys(recordsStore);
   if (allKeys.length === 0) return [];
-
-  const records = await Promise.all(
-    allKeys.map((k) => get(k, recordsStore))
-  );
-
-  return records
-    .filter(Boolean)
-    .sort((a, b) => {
-      const aStr = `${a.date}T${a.time || '00:00'}`;
-      const bStr = `${b.date}T${b.time || '00:00'}`;
-      return bStr.localeCompare(aStr);
-    });
+  const records = await Promise.all(allKeys.map((k) => get(k, recordsStore)));
+  return records.filter(Boolean).sort((a, b) => {
+    const aStr = a.date + 'T' + (a.time || '00:00');
+    const bStr = b.date + 'T' + (b.time || '00:00');
+    return bStr.localeCompare(aStr);
+  });
 }
 
-export async function getRecord(id) {
-  return get(id, recordsStore);
-}
+export async function getRecord(id) { return get(id, recordsStore); }
 
 export async function addRecord(data) {
-  const now      = Date.now();
-  const id       = crypto.randomUUID();
+  const now = Date.now();
+  const id  = crypto.randomUUID();
   const category = data.category ?? 'veggie';
-
   let record;
 
   if (category === 'diary') {
     const images = [];
     const fileList = Array.from(data.imageFiles ?? []);
     for (let i = 0; i < fileList.length; i++) {
-      try {
-        const blob = await compressImage(fileList[i]);
-        images.push(blob);
-      } catch (e) {
-        throw new Error(`画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
-      }
+      try { images.push(await compressImage(fileList[i])); }
+      catch (e) { throw new Error('画像 ' + (i+1) + ' 枚目の圧縮に失敗しました: ' + e.message); }
     }
-    record = {
-      id,
-      category: 'diary',
-      date:      data.date ?? '',
-      time:      data.time ?? '',
-      images,
-      text:      data.text ?? '',
-      archived:  false,
-      published: false,
-      createdAt: now,
-      updatedAt: now,
-    };
+    record = { id, category: 'diary', date: data.date ?? '', time: data.time ?? '', images, text: data.text ?? '', archived: false, published: false, createdAt: now, updatedAt: now };
   } else if (category === 'bed') {
     const images = [];
     const fileList = Array.from(data.imageFiles ?? []);
     for (let i = 0; i < fileList.length; i++) {
-      try {
-        const blob = await compressImage(fileList[i]);
-        images.push(blob);
-      } catch (e) {
-        throw new Error(`画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
-      }
+      try { images.push(await compressImage(fileList[i])); }
+      catch (e) { throw new Error('画像 ' + (i+1) + ' 枚目の圧縮に失敗しました: ' + e.message); }
     }
-    record = {
-      id,
-      category: 'bed',
-      date:      data.date    ?? '',
-      time:      data.time    ?? '',
-      images,
-      comment:   data.comment ?? '',
-      tags:      data.tags    ?? [],
-      archived:  false,
-      published: false,
-      createdAt: now,
-      updatedAt: now,
-    };
+    record = { id, category: 'bed', date: data.date ?? '', time: data.time ?? '', images, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
   } else {
     let imageBlob = null;
-    if (data.imageFile) {
-      imageBlob = await compressImage(data.imageFile);
-    }
-    record = {
-      id,
-      category:  'veggie',
-      date:      data.date    ?? '',
-      time:      data.time    ?? '',
-      imageBlob,
-      comment:   data.comment ?? '',
-      tags:      data.tags    ?? [],
-      archived:  false,
-      published: false,
-      createdAt: now,
-      updatedAt: now,
-    };
+    if (data.imageFile) { imageBlob = await compressImage(data.imageFile); }
+    record = { id, category: 'veggie', date: data.date ?? '', time: data.time ?? '', imageBlob, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
   }
 
   await set(id, record, recordsStore);
@@ -214,84 +104,48 @@ export async function addRecord(data) {
 
 export async function updateRecord(id, updates) {
   const existing = await get(id, recordsStore);
-  if (!existing) throw new Error(`記録が見つかりません: ${id}`);
-
+  if (!existing) throw new Error('記録が見つかりません: ' + id);
   const category = existing.category ?? 'veggie';
-
-  const {
-    imageFile,
-    imageFiles,
-    addImageFiles,
-    images: newImagesArray,
-    ...restUpdates
-  } = updates;
-
+  const { imageFile, imageFiles, addImageFiles, images: newImagesArray, ...restUpdates } = updates;
   const base = { ...existing, ...restUpdates, updatedAt: Date.now() };
-
   if (category === 'veggie') {
-    if (imageFile) {
-      base.imageBlob = await compressImage(imageFile);
-    }
+    if (imageFile) { base.imageBlob = await compressImage(imageFile); }
   } else {
     let images = existing.images ?? [];
-
-    if (newImagesArray !== undefined) {
-      images = newImagesArray;
-    }
-
+    if (newImagesArray !== undefined) { images = newImagesArray; }
     if (imageFiles && imageFiles.length > 0) {
       const fileList = Array.from(imageFiles);
       images = [];
       for (let i = 0; i < fileList.length; i++) {
-        try {
-          const blob = await compressImage(fileList[i]);
-          images.push(blob);
-        } catch (e) {
-          throw new Error(`画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
-        }
+        try { images.push(await compressImage(fileList[i])); }
+        catch (e) { throw new Error('画像 ' + (i+1) + ' 枚目の圧縮に失敗しました: ' + e.message); }
       }
     } else if (addImageFiles && addImageFiles.length > 0) {
       const fileList = Array.from(addImageFiles);
       for (let i = 0; i < fileList.length; i++) {
-        try {
-          const blob = await compressImage(fileList[i]);
-          images.push(blob);
-        } catch (e) {
-          throw new Error(`追加画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
-        }
+        try { images.push(await compressImage(fileList[i])); }
+        catch (e) { throw new Error('追加画像 ' + (i+1) + ' 枚目の圧縮に失敗しました: ' + e.message); }
       }
     }
-
     base.images = images;
   }
-
   await set(id, base, recordsStore);
   return base;
 }
 
-export async function deleteRecord(id) {
-  await del(id, recordsStore);
-}
+export async function deleteRecord(id) { await del(id, recordsStore); }
 
 export async function toggleArchive(id) {
   const record = await get(id, recordsStore);
-  if (!record) throw new Error(`記録が見つかりません: ${id}`);
+  if (!record) throw new Error('記録が見つかりません: ' + id);
   return updateRecord(id, { archived: !record.archived });
 }
 
 export async function publishRecords(ids) {
-  await Promise.all(
-    ids.map((id) => updateRecord(id, { published: true }))
-  );
+  await Promise.all(ids.map((id) => updateRecord(id, { published: true })));
 }
 
-export async function unpublishRecord(id) {
-  return updateRecord(id, { published: false });
-}
-
-// ─────────────────────────────────────────
-// Tags CRUD
-// ─────────────────────────────────────────
+export async function unpublishRecord(id) { return updateRecord(id, { published: false }); }
 
 export async function getTags() {
   const stored = await get('tags', tagsStore);
@@ -300,17 +154,12 @@ export async function getTags() {
   return DEFAULT_TAGS;
 }
 
-export async function saveTags(tags) {
-  await set('tags', tags, tagsStore);
-}
+export async function saveTags(tags) { await set('tags', tags, tagsStore); }
 
 export async function addTag(category, tag) {
   const tags = await getTags();
   if (!tags[category]) tags[category] = [];
-  if (!tags[category].includes(tag)) {
-    tags[category] = [...tags[category], tag];
-    await saveTags(tags);
-  }
+  if (!tags[category].includes(tag)) { tags[category] = [...tags[category], tag]; await saveTags(tags); }
   return tags;
 }
 
@@ -322,27 +171,8 @@ export async function removeTag(category, tag) {
   return tags;
 }
 
-// ─────────────────────────────────────────
-// 畝↔野菜マッピング
-// ─────────────────────────────────────────
+export async function getBedVeggieMap() { return (await get('bedVeggieMap', tagsStore)) ?? {}; }
+export async function saveBedVeggieMap(map) { await set('bedVeggieMap', map, tagsStore); }
 
-export async function getBedVeggieMap() {
-  const map = await get('bedVeggieMap', tagsStore);
-  return map ?? {};
-}
-
-export async function saveBedVeggieMap(map) {
-  await set('bedVeggieMap', map, tagsStore);
-}
-
-// ─────────────────────────────────────────
-// Settings（APIキーなど）
-// ─────────────────────────────────────────
-
-export async function getApiKey() {
-  return (await get('apiKey', settingsStore)) ?? '';
-}
-
-export async function saveApiKey(key) {
-  await set('apiKey', key.trim(), settingsStore);
-}
+export async function getApiKey() { return (await get('apiKey', settingsStore)) ?? ''; }
+export async function saveApiKey(key) { await set('apiKey', key.trim(), settingsStore); }
