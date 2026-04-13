@@ -14,53 +14,54 @@ const COLORS = {
   tagText:      '#3A6B47',
 };
 
-const IS_OWNER      = import.meta.env.VITE_OWNER_MODE === 'true';
-const API_ENDPOINT  = 'https://api.saien.career-life.tech/publish';
+const IS_OWNER     = import.meta.env.VITE_OWNER_MODE === 'true';
+const API_BASE     = 'https://api.saien.career-life.tech';
 
-async function publishToApi(selectedRecords) {
-  const apiKey = import.meta.env.VITE_API_KEY;
+// Blob → base64文字列
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
-  const formData = new FormData();
-  const recordsMeta = selectedRecords.map((r) => ({
-    id:       r.id,
-    date:     r.date,
-    time:     r.time,
-    comment:  r.comment,
-    text:     r.text,
-    tags:     r.tags,
-    category: r.category,
-    imageKey: r.id,
-  }));
-
-  formData.append('records', JSON.stringify(recordsMeta));
-
-  for (const r of selectedRecords) {
-    if (r.imageBlob) {
-      formData.append(`image_${r.id}`, r.imageBlob, `${r.id}.jpg`);
-    }
-    if (r.images) {
-      r.images.forEach((blob, i) => {
-        formData.append(`image_${r.id}_${i}`, blob, `${r.id}_${i}.jpg`);
-      });
+// 1件の記録をWorkerに送信
+async function publishRecord(record, apiKey) {
+  // 画像をbase64に変換
+  const imageBase64s = [];
+  const images = record.images ?? (record.imageBlob ? [record.imageBlob] : []);
+  for (const blob of images) {
+    if (blob instanceof Blob) {
+      imageBase64s.push(await blobToBase64(blob));
     }
   }
 
-  if (!apiKey) {
-    console.log('[PublishScreen] VITE_API_KEY 未設定のためモック送信:', recordsMeta);
-    return { ok: true, mock: true };
-  }
+  const body = {
+    id:           record.id,
+    category:     record.category ?? 'veggie',
+    date:         record.date,
+    time:         record.time ?? '',
+    comment:      record.comment ?? '',
+    text:         record.text ?? '',
+    tags:         record.tags ?? [],
+    imageBase64s,
+  };
 
-  const res = await fetch(API_ENDPOINT, {
+  const res = await fetch(`${API_BASE}/publish`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: formData,
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`APIエラー ${res.status}: ${text}`);
+    const msg = await res.text();
+    throw new Error(`APIエラー ${res.status}: ${msg}`);
   }
-
   return res.json();
 }
 
@@ -74,30 +75,39 @@ function getCategoryIcon(r) {
 export function PublishScreen({ records }) {
   const [selected,   setSelected]   = useState([]);
   const [publishing, setPublishing] = useState(false);
+  const [progress,   setProgress]   = useState('');
   const [error,      setError]      = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
 
   const unpublished = records.records.filter((r) => !r.archived && !r.published);
   const published   = records.records.filter((r) => !r.archived &&  r.published);
 
-  const toggleSelect = (id) => {
+  const toggleSelect = (id) =>
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
-  };
 
   const selectAll = () => setSelected(unpublished.map((r) => r.id));
   const clearAll  = () => setSelected([]);
 
   const handlePublish = async () => {
     if (!IS_OWNER || selected.length === 0) return;
+    const apiKey = import.meta.env.VITE_API_KEY;
+    if (!apiKey) {
+      setError('VITE_API_KEY が設定されていません');
+      return;
+    }
+
     setPublishing(true);
     setError(null);
     setSuccessMsg('');
+
     try {
       const targets = records.records.filter((r) => selected.includes(r.id));
-      const result  = await publishToApi(targets);
-      if (result.mock) console.log('[PublishScreen] モック公開完了:', selected);
+      for (let i = 0; i < targets.length; i++) {
+        setProgress(`${i + 1} / ${targets.length} 件を公開中…`);
+        await publishRecord(targets[i], apiKey);
+      }
       await records.publish(selected);
       setSelected([]);
       setSuccessMsg(`${targets.length}件を公開しました`);
@@ -106,11 +116,19 @@ export function PublishScreen({ records }) {
       setError(e.message);
     } finally {
       setPublishing(false);
+      setProgress('');
     }
   };
 
   const handleUnpublish = async (id) => {
+    const apiKey = import.meta.env.VITE_API_KEY;
     try {
+      if (apiKey) {
+        await fetch(`${API_BASE}/record/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+        });
+      }
       await records.unpublish(id);
     } catch (e) {
       console.error(e);
@@ -149,22 +167,8 @@ export function PublishScreen({ records }) {
               未公開の記録（{unpublished.length}件）
             </span>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                onClick={selectAll}
-                style={{
-                  padding: '8px 14px', borderRadius: 8, minHeight: 44,
-                  border: `1px solid ${COLORS.border}`, background: COLORS.card,
-                  color: COLORS.textLight, fontSize: 16, cursor: 'pointer',
-                }}
-              >全選択</button>
-              <button
-                onClick={clearAll}
-                style={{
-                  padding: '8px 14px', borderRadius: 8, minHeight: 44,
-                  border: `1px solid ${COLORS.border}`, background: COLORS.card,
-                  color: COLORS.textLight, fontSize: 16, cursor: 'pointer',
-                }}
-              >解除</button>
+              <button onClick={selectAll} style={btnStyle}>全選択</button>
+              <button onClick={clearAll}  style={btnStyle}>解除</button>
             </div>
           </div>
 
@@ -258,11 +262,7 @@ export function PublishScreen({ records }) {
                   {IS_OWNER && (
                     <button
                       onClick={() => handleUnpublish(r.id)}
-                      style={{
-                        padding: '8px 14px', borderRadius: 8, minHeight: 44,
-                        border: `1px solid ${COLORS.border}`, background: COLORS.card,
-                        color: COLORS.textLight, fontSize: 15, cursor: 'pointer', flexShrink: 0,
-                      }}
+                      style={btnStyle}
                     >非公開に戻す</button>
                   )}
                 </div>
@@ -272,7 +272,7 @@ export function PublishScreen({ records }) {
         </div>
       </div>
 
-      {/* 公開ボタン（オーナーモードのみ） */}
+      {/* 公開ボタン */}
       {IS_OWNER && (
         <div style={{
           padding: '12px 16px',
@@ -280,6 +280,11 @@ export function PublishScreen({ records }) {
           borderTop: `1px solid ${COLORS.border}`,
           flexShrink: 0,
         }}>
+          {publishing && progress && (
+            <div style={{ textAlign: 'center', color: COLORS.textLight, fontSize: 16, marginBottom: 8 }}>
+              {progress}
+            </div>
+          )}
           <button
             onClick={handlePublish}
             disabled={selected.length === 0 || publishing}
@@ -295,11 +300,16 @@ export function PublishScreen({ records }) {
               ? '公開中…'
               : selected.length > 0
                 ? `選択した${selected.length}件をまとめて公開`
-                : '公開する記録を選択してください'
-            }
+                : '公開する記録を選択してください'}
           </button>
         </div>
       )}
     </div>
   );
 }
+
+const btnStyle = {
+  padding: '8px 14px', borderRadius: 8, minHeight: 44,
+  border: `1px solid #E5E0D8`, background: '#FFFFFF',
+  color: '#888888', fontSize: 16, cursor: 'pointer',
+};
