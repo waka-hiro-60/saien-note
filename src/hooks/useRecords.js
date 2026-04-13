@@ -120,19 +120,19 @@ export function useRecords() {
     }
   }, []);
 
-  // ─── タグで絞り込み ───
+  // ─── タグで絞り込み（OR検索：いずれかのタグを持つ記録） ───
   const filterByTags = useCallback(
     (selectedTags) => {
       if (!selectedTags || selectedTags.length === 0) return records;
       return records.filter((r) => {
         const rTags = r.tags ?? [];
-        return selectedTags.every((tag) => rTags.includes(tag));
+        return selectedTags.some((tag) => rTags.includes(tag));
       });
     },
     [records]
   );
 
-  // ─── キーワード検索（comment / text フィールド両対応） ───
+  // ─── キーワード検索（comment / text / tags フィールド対応） ───
   const search = useCallback(
     (keyword) => {
       if (!keyword || keyword.trim() === '') return records;
@@ -147,16 +147,20 @@ export function useRecords() {
     [records]
   );
 
-  // ─── タグ＋キーワード複合検索 ───
+  // ─── タグ（OR）＋キーワード複合検索 ───
+  // タグは OR 検索：選んだタグのうち1つでも持っていれば表示
+  // キーワードは AND 検索：comment / text / tags のいずれかに含まれれば表示
   const searchAndFilter = useCallback(
     (keyword, selectedTags) => {
       let result = records;
+
       if (selectedTags && selectedTags.length > 0) {
         result = result.filter((r) => {
           const rTags = r.tags ?? [];
-          return selectedTags.every((tag) => rTags.includes(tag));
+          return selectedTags.some((tag) => rTags.includes(tag));
         });
       }
+
       if (keyword && keyword.trim() !== '') {
         const kw = keyword.trim().toLowerCase();
         result = result.filter(
@@ -166,6 +170,7 @@ export function useRecords() {
             (r.tags    ?? []).some((t) => t.toLowerCase().includes(kw))
         );
       }
+
       return result;
     },
     [records]
