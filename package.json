@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "postbuild": "node -e \"require('fs').writeFileSync('dist/_redirects', '/app/*  /app/index.html  200\\n')\""
+    "preview": "vite preview"
   },
   "dependencies": {
     "exifr": "^7.1.3",
