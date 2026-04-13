@@ -18,10 +18,6 @@ const COLORS = {
   bedBg:        '#F0F5F0',
 };
 
-// ─────────────────────────────────────────
-// EXIF読み取り（AddScreenと同じロジック）
-// ─────────────────────────────────────────
-
 async function getDateTimeFromFile(file) {
   try {
     const exifr = (await import('exifr')).default;
@@ -46,16 +42,10 @@ async function getDateTimeFromFile(file) {
         const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         return { date, time };
       }
-    } catch (e) {
-      console.log('[Exif] lastModified失敗:', e != null ? e.message : 'null error');
-    }
+    } catch (e) {}
   }
   return null;
 }
-
-// ─────────────────────────────────────────
-// ユーティリティ（旧Blob形式の後方互換用）
-// ─────────────────────────────────────────
 
 function blobToBase64(blob) {
   return new Promise((resolve) => {
@@ -67,13 +57,8 @@ function blobToBase64(blob) {
   });
 }
 
-// ─────────────────────────────────────────
-// ImageGrid（Base64文字列配列専用）
-// ─────────────────────────────────────────
-
 function ImageGrid({ srcs, editable, onRemove }) {
   const count = (srcs ?? []).length;
-
   if (count === 0) {
     return (
       <div style={{
@@ -83,7 +68,6 @@ function ImageGrid({ srcs, editable, onRemove }) {
       }}>写真なし</div>
     );
   }
-
   if (count === 1) {
     return (
       <div style={{ position: 'relative' }}>
@@ -93,17 +77,14 @@ function ImageGrid({ srcs, editable, onRemove }) {
         </div>
         {editable && (
           <button onClick={() => onRemove(0)} style={{
-            position: 'absolute', top: 8, right: 8,
-            width: 32, height: 32, borderRadius: '50%',
-            border: 'none', background: 'rgba(0,0,0,0.6)',
-            color: '#fff', fontSize: 16, cursor: 'pointer',
+            position: 'absolute', top: 8, right: 8, width: 32, height: 32, borderRadius: '50%',
+            border: 'none', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 16, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>✕</button>
         )}
       </div>
     );
   }
-
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, padding: 4, background: '#111' }}>
       {srcs.map((src, i) => (
@@ -113,11 +94,9 @@ function ImageGrid({ srcs, editable, onRemove }) {
           </div>
           {editable && (
             <button onClick={() => onRemove(i)} style={{
-              position: 'absolute', top: 2, right: 2,
-              width: 24, height: 24, borderRadius: '50%',
-              border: 'none', background: 'rgba(0,0,0,0.6)',
-              color: '#fff', fontSize: 12, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+              position: 'absolute', top: 2, right: 2, width: 24, height: 24, borderRadius: '50%',
+              border: 'none', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 12,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
             }}>✕</button>
           )}
         </div>
@@ -125,10 +104,6 @@ function ImageGrid({ srcs, editable, onRemove }) {
     </div>
   );
 }
-
-// ─────────────────────────────────────────
-// DetailScreen
-// ─────────────────────────────────────────
 
 export function DetailScreen({ record, onClose, records, tags }) {
   const category = record.category ?? 'veggie';
@@ -139,6 +114,9 @@ export function DetailScreen({ record, onClose, records, tags }) {
   const [editComment,   setEditComment]   = useState(record.comment ?? '');
   const [editText,      setEditText]      = useState(record.text ?? '');
   const [editTags,      setEditTags]      = useState(record.tags ?? []);
+  const [editHarvestCount, setEditHarvestCount] = useState(
+    record.harvestCount != null ? String(record.harvestCount) : ''
+  );
   const [saving,        setSaving]        = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -146,7 +124,15 @@ export function DetailScreen({ record, onClose, records, tags }) {
   const albumRef    = useRef();
   const editInitRef = useRef(false);
 
-  // veggie: 閲覧モード表示（旧Blob後方互換）
+  // 収穫タグが編集中に選ばれているか
+  const hasHarvestTag = category === 'veggie' && editTags.includes('収穫');
+
+  // 収穫タグが外れたら収穫数をリセット
+  useEffect(() => {
+    if (!hasHarvestTag) setEditHarvestCount('');
+  }, [hasHarvestTag]);
+
+  // veggie: 閲覧モード表示
   const [viewImgBase64, setViewImgBase64] = useState(null);
   useEffect(() => {
     if (category !== 'veggie') { setViewImgBase64(null); return; }
@@ -155,18 +141,13 @@ export function DetailScreen({ record, onClose, records, tags }) {
     setViewImgBase64(null);
   }, [record.imageBase64, record.imageBlob, category]);
 
-  // veggie: 編集モードで新規選択した画像
   const [editImgBase64, setEditImgBase64] = useState(null);
-
-  // bed/diary: 編集モードの全写真
   const [allImageBase64, setAllImageBase64] = useState([]);
 
-  // 編集モード開始時に既存画像を初期化
   useEffect(() => {
     if (!editMode || category === 'veggie') return;
     if (editInitRef.current) return;
     editInitRef.current = true;
-
     if (record.imageBase64s) { setAllImageBase64([...record.imageBase64s]); return; }
     const blobs = record.images ?? [];
     if (blobs.length === 0) { setAllImageBase64([]); return; }
@@ -177,27 +158,19 @@ export function DetailScreen({ record, onClose, records, tags }) {
     return () => { cancelled = true; };
   }, [editMode, category]);
 
-  // 写真追加（bed/diary）
-  // ⚠️ input.value='' は処理後（iOS Safari対応）
-  // 最初の1枚目のみEXIFで日時を更新
   const handleAddImages = async (files, inputRef) => {
     const arr = Array.from(files);
     const isFirst = allImageBase64.length === 0;
-
     for (const file of arr) {
       try {
         const base64 = await compressImage(file);
         if (base64) setAllImageBase64((prev) => [...prev, base64]);
-      } catch (e) {
-        console.warn('写真追加失敗:', e);
-      }
+      } catch (e) { console.warn('写真追加失敗:', e); }
     }
-
     if (isFirst && arr.length > 0) {
       const dt = await getDateTimeFromFile(arr[0]);
       if (dt) { setEditDate(dt.date); setEditTime(dt.time); }
     }
-
     if (inputRef?.current) inputRef.current.value = '';
   };
 
@@ -205,7 +178,6 @@ export function DetailScreen({ record, onClose, records, tags }) {
     setAllImageBase64((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // タグ編集
   const veggieTags   = tags.tags.野菜 ?? [];
   const placeTags    = tags.tags.場所 ?? [];
   const bedVeggieMap = tags.bedVeggieMap ?? {};
@@ -244,8 +216,11 @@ export function DetailScreen({ record, onClose, records, tags }) {
     try {
       const updates = { date: editDate, time: editTime };
       if (category === 'veggie') {
-        updates.comment = editComment;
-        updates.tags    = editTags;
+        updates.comment      = editComment;
+        updates.tags         = editTags;
+        updates.harvestCount = hasHarvestTag && editHarvestCount !== ''
+          ? Number(editHarvestCount)
+          : null;
         if (editImgBase64) updates.imageBase64 = editImgBase64;
       } else if (category === 'bed') {
         updates.comment      = editComment;
@@ -273,6 +248,9 @@ export function DetailScreen({ record, onClose, records, tags }) {
     setEditMode(false);
     setEditImgBase64(null);
     setAllImageBase64([]);
+    // 編集前の値に戻す
+    setEditHarvestCount(record.harvestCount != null ? String(record.harvestCount) : '');
+    setEditTags(record.tags ?? []);
   };
 
   const handleDelete = async () => {
@@ -287,6 +265,11 @@ export function DetailScreen({ record, onClose, records, tags }) {
   const headerTitle = category === 'diary' ? '活動日記' : category === 'bed' ? '畝の記録' : '野菜記録';
   const headerBg    = category === 'diary' ? COLORS.diaryBg : category === 'bed' ? COLORS.bedBg : COLORS.card;
   const veggieDisplaySrc = editMode ? (editImgBase64 || viewImgBase64) : viewImgBase64;
+
+  // 閲覧モードで収穫タグと収穫数があるか
+  const showHarvestBadge = category === 'veggie'
+    && (record.tags ?? []).includes('収穫')
+    && record.harvestCount != null;
 
   return (
     <div style={{
@@ -339,12 +322,11 @@ export function DetailScreen({ record, onClose, records, tags }) {
                 <div style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 8 }}>
                   <button onClick={() => cameraRef.current?.click()} style={editImgBtnStyle}>📷 カメラ</button>
                   <button onClick={() => albumRef.current?.click()} style={editImgBtnStyle}>🖼️ アルバム</button>
-                  {/* veggie編集: EXIF読み取り + compressImage → editImgBase64 */}
                   <input ref={cameraRef} type="file" accept="image/*" capture="environment"
                     style={{ display: 'none' }}
                     onChange={async (e) => {
                       const file = e.target.files[0]; if (!file) return;
-                      const dt  = await getDateTimeFromFile(file);
+                      const dt = await getDateTimeFromFile(file);
                       const b64 = await compressImage(file);
                       if (b64) setEditImgBase64(b64);
                       if (dt) { setEditDate(dt.date); setEditTime(dt.time); }
@@ -354,7 +336,7 @@ export function DetailScreen({ record, onClose, records, tags }) {
                     style={{ display: 'none' }}
                     onChange={async (e) => {
                       const file = e.target.files[0]; if (!file) return;
-                      const dt  = await getDateTimeFromFile(file);
+                      const dt = await getDateTimeFromFile(file);
                       const b64 = await compressImage(file);
                       if (b64) setEditImgBase64(b64);
                       if (dt) { setEditDate(dt.date); setEditTime(dt.time); }
@@ -366,8 +348,47 @@ export function DetailScreen({ record, onClose, records, tags }) {
             <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
               <DateTimeFields editMode={editMode} date={record.date} time={record.time}
                 editDate={editDate} setEditDate={setEditDate} editTime={editTime} setEditTime={setEditTime} />
+
+              {/* 収穫数：閲覧モード */}
+              {!editMode && showHarvestBadge && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 14px', borderRadius: 10,
+                  background: COLORS.primaryLight, border: `1px solid ${COLORS.primary}`,
+                }}>
+                  <span style={{ fontSize: 22 }}>🌾</span>
+                  <span style={{ fontSize: 20, fontWeight: 700, color: COLORS.primary }}>
+                    {record.harvestCount}個
+                  </span>
+                  <span style={{ fontSize: 16, color: COLORS.textLight }}>収穫</span>
+                </div>
+              )}
+
               <TagSection editMode={editMode} tags={record.tags} editTags={editTags}
                 allTags={tags.tags} onToggle={toggleEditTag} />
+
+              {/* 収穫数：編集モード */}
+              {editMode && hasHarvestTag && (
+                <div>
+                  <div style={{ fontSize: 16, color: COLORS.textLight, marginBottom: 6 }}>収穫数</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <input
+                      type="number" min="0"
+                      value={editHarvestCount}
+                      onChange={(e) => setEditHarvestCount(e.target.value)}
+                      placeholder="0"
+                      style={{
+                        width: 120, padding: '12px', borderRadius: 8,
+                        border: `2px solid ${COLORS.primary}`, fontSize: 24,
+                        background: COLORS.card, color: COLORS.text,
+                        textAlign: 'center', fontWeight: 700, boxSizing: 'border-box', minHeight: 56,
+                      }}
+                    />
+                    <span style={{ fontSize: 20, color: COLORS.text }}>個</span>
+                  </div>
+                </div>
+              )}
+
               <CommentSection editMode={editMode} comment={record.comment}
                 editComment={editComment} setEditComment={setEditComment} />
             </div>

@@ -6,6 +6,7 @@ const COLORS = {
   card:         '#FFFFFF',
   primary:      '#4A7C59',
   primaryLight: '#E8F0E9',
+  accent:       '#C8A96E',
   text:         '#2C2C2C',
   textLight:    '#888888',
   border:       '#E5E0D8',
@@ -13,29 +14,24 @@ const COLORS = {
   tagText:      '#3A6B47',
 };
 
-// ─── 年比較カード（Base64対応） ───
 function CompareCard({ record }) {
   const cat = record.category ?? 'veggie';
   const src = cat === 'veggie'
     ? (record.imageBase64 ?? null)
     : (record.imageBase64s ?? [])[0] ?? null;
-
   const icon = cat === 'diary' ? '📔' : cat === 'bed' ? '🌱' : '🥬';
   const text = record.text || record.comment || '';
+  const hasHarvest = cat === 'veggie'
+    && (record.tags ?? []).includes('収穫')
+    && record.harvestCount != null;
 
   return (
     <div style={{
-      marginBottom: 10,
-      background: COLORS.card,
-      borderRadius: 10,
-      overflow: 'hidden',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+      marginBottom: 10, background: COLORS.card, borderRadius: 10,
+      overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
     }}>
       <div style={{ width: '100%', paddingTop: '75%', position: 'relative', background: '#E5E0D8' }}>
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {src
             ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : <span style={{ fontSize: 28 }}>{icon}</span>
@@ -48,6 +44,15 @@ function CompareCard({ record }) {
             background: 'rgba(0,0,0,0.55)', color: '#fff',
             fontSize: 11, borderRadius: 4, padding: '1px 5px', lineHeight: 1.4,
           }}>📷{record.imageBase64s.length}</div>
+        )}
+        {/* 収穫数バッジ（カード右上） */}
+        {hasHarvest && (
+          <div style={{
+            position: 'absolute', top: 4, right: 4,
+            background: COLORS.primary, color: '#fff',
+            fontSize: 12, borderRadius: 6, padding: '2px 6px',
+            fontWeight: 700, lineHeight: 1.4,
+          }}>🌾{record.harvestCount}個</div>
         )}
       </div>
       <div style={{ padding: '8px 10px' }}>
@@ -77,19 +82,43 @@ function CompareCard({ record }) {
   );
 }
 
-// ─── TagScreen（年比較専用） ───
+// 収穫集計バナー（野菜タグ選択時のみ）
+function HarvestSummary({ records, year }) {
+  const harvestRecs = records.filter(
+    (r) => (r.tags ?? []).includes('収穫') && r.harvestCount != null
+  );
+  if (harvestRecs.length === 0) return null;
+  const total = harvestRecs.reduce((sum, r) => sum + Number(r.harvestCount), 0);
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '8px 12px', borderRadius: 8, marginBottom: 8,
+      background: COLORS.primaryLight, border: `1px solid ${COLORS.primary}`,
+    }}>
+      <span style={{ fontSize: 18 }}>🌾</span>
+      <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.primary }}>
+        {year}年 計{total}個
+      </span>
+      <span style={{ fontSize: 14, color: COLORS.textLight }}>
+        ({harvestRecs.length}回)
+      </span>
+    </div>
+  );
+}
+
 export function TagScreen({ records, tags }) {
   const [selectedTag, setSelectedTag] = useState('');
   const [leftYear,    setLeftYear]    = useState('');
   const [rightYear,   setRightYear]   = useState('');
   const [monthFilter, setMonthFilter] = useState('');
 
-  // 選択タグの記録（アーカイブ除外）
+  const veggieTags = tags.tags.野菜 ?? [];
+  const isVeggieTag = veggieTags.includes(selectedTag);
+
   const tagRecords = selectedTag
     ? records.records.filter((r) => !r.archived && (r.tags ?? []).includes(selectedTag))
     : [];
 
-  // 年ごとにグループ化
   const byYear = tagRecords.reduce((acc, r) => {
     const year = r.date ? r.date.slice(0, 4) : '不明';
     if (!acc[year]) acc[year] = [];
@@ -97,20 +126,17 @@ export function TagScreen({ records, tags }) {
     return acc;
   }, {});
 
-  // 選択可能な年：記録のある年 ＋ 現在年から過去4年を合わせてソート
   const currentYear = new Date().getFullYear();
   const recordYears = Object.keys(byYear);
   const rangeYears  = Array.from({ length: 4 }, (_, i) => String(currentYear - i));
   const selectableYears = [...new Set([...recordYears, ...rangeYears])].sort((a, b) => b.localeCompare(a));
 
-  // タグが変わったら年・月フィルターをリセット
   useEffect(() => {
     setLeftYear(selectableYears[0] ?? '');
     setRightYear(selectableYears[1] ?? '');
     setMonthFilter('');
   }, [selectedTag]); // eslint-disable-line
 
-  // 月フィルター用：全年共通の月（MM）一覧
   const compareMonths = [...new Set(tagRecords.map((r) => r.date?.slice(5, 7)).filter(Boolean))].sort();
 
   const filterByMonth = (recs) => {
@@ -125,10 +151,8 @@ export function TagScreen({ records, tags }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* ヘッダー */}
       <div style={{
-        padding: '14px 16px 10px',
-        background: COLORS.card,
-        borderBottom: `1px solid ${COLORS.border}`,
-        flexShrink: 0,
+        padding: '14px 16px 10px', background: COLORS.card,
+        borderBottom: `1px solid ${COLORS.border}`, flexShrink: 0,
       }}>
         <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.text }}>年別比較</span>
       </div>
@@ -137,8 +161,7 @@ export function TagScreen({ records, tags }) {
 
         {/* Step1: タグ選択 */}
         <div style={{
-          padding: '12px 16px',
-          background: COLORS.card,
+          padding: '12px 16px', background: COLORS.card,
           borderBottom: `1px solid ${COLORS.border}`,
         }}>
           <div style={{ fontSize: 15, color: COLORS.textLight, marginBottom: 8, fontWeight: 600 }}>
@@ -155,16 +178,14 @@ export function TagScreen({ records, tags }) {
                     {tagList.map((tag) => {
                       const active = selectedTag === tag;
                       return (
-                        <button
-                          key={tag}
+                        <button key={tag}
                           onClick={() => setSelectedTag((prev) => prev === tag ? '' : tag)}
                           style={{
                             padding: '6px 12px', borderRadius: 20, minHeight: 44,
                             border: `2px solid ${active ? COLORS.primary : COLORS.border}`,
                             background: active ? COLORS.primaryLight : COLORS.card,
                             color: active ? COLORS.tagText : COLORS.text,
-                            fontSize: 16, cursor: 'pointer',
-                            fontWeight: active ? 700 : 400,
+                            fontSize: 16, cursor: 'pointer', fontWeight: active ? 700 : 400,
                           }}
                         >{tag}</button>
                       );
@@ -192,15 +213,11 @@ export function TagScreen({ records, tags }) {
               ② 比べる年を選ぶ
             </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
-              <select
-                value={leftYear}
-                onChange={(e) => setLeftYear(e.target.value)}
-                style={{
-                  flex: 1, padding: '10px', borderRadius: 8, minHeight: 48,
-                  border: `1px solid ${COLORS.border}`, fontSize: 16,
-                  background: COLORS.card, color: COLORS.text,
-                }}
-              >
+              <select value={leftYear} onChange={(e) => setLeftYear(e.target.value)} style={{
+                flex: 1, padding: '10px', borderRadius: 8, minHeight: 48,
+                border: `1px solid ${COLORS.border}`, fontSize: 16,
+                background: COLORS.card, color: COLORS.text,
+              }}>
                 <option value="">年を選択</option>
                 {selectableYears.map((y) => (
                   <option key={y} value={y}>
@@ -209,15 +226,11 @@ export function TagScreen({ records, tags }) {
                 ))}
               </select>
               <div style={{ fontSize: 16, color: COLORS.textLight, flexShrink: 0 }}>vs</div>
-              <select
-                value={rightYear}
-                onChange={(e) => setRightYear(e.target.value)}
-                style={{
-                  flex: 1, padding: '10px', borderRadius: 8, minHeight: 48,
-                  border: `1px solid ${COLORS.border}`, fontSize: 16,
-                  background: COLORS.card, color: COLORS.text,
-                }}
-              >
+              <select value={rightYear} onChange={(e) => setRightYear(e.target.value)} style={{
+                flex: 1, padding: '10px', borderRadius: 8, minHeight: 48,
+                border: `1px solid ${COLORS.border}`, fontSize: 16,
+                background: COLORS.card, color: COLORS.text,
+              }}>
                 <option value="">年を選択</option>
                 {selectableYears.map((y) => (
                   <option key={y} value={y}>
@@ -227,7 +240,7 @@ export function TagScreen({ records, tags }) {
               </select>
             </div>
 
-            {/* 月フィルター（記録がある月だけ表示） */}
+            {/* 月フィルター */}
             {compareMonths.length > 1 && (
               <>
                 <div style={{ fontSize: 15, color: COLORS.textLight, marginBottom: 8, fontWeight: 600 }}>
@@ -237,30 +250,23 @@ export function TagScreen({ records, tags }) {
                   display: 'flex', gap: 6, overflowX: 'auto',
                   paddingBottom: 10, scrollbarWidth: 'none', marginBottom: 12,
                 }}>
-                  <button
-                    onClick={() => setMonthFilter('')}
-                    style={{
-                      flexShrink: 0, padding: '6px 14px', borderRadius: 20, minHeight: 44,
-                      border: `2px solid ${!monthFilter ? COLORS.primary : COLORS.border}`,
-                      background: !monthFilter ? COLORS.primaryLight : COLORS.card,
-                      color: !monthFilter ? COLORS.tagText : COLORS.textLight,
-                      fontSize: 16, cursor: 'pointer', fontWeight: !monthFilter ? 700 : 400,
-                    }}
-                  >すべて</button>
+                  <button onClick={() => setMonthFilter('')} style={{
+                    flexShrink: 0, padding: '6px 14px', borderRadius: 20, minHeight: 44,
+                    border: `2px solid ${!monthFilter ? COLORS.primary : COLORS.border}`,
+                    background: !monthFilter ? COLORS.primaryLight : COLORS.card,
+                    color: !monthFilter ? COLORS.tagText : COLORS.textLight,
+                    fontSize: 16, cursor: 'pointer', fontWeight: !monthFilter ? 700 : 400,
+                  }}>すべて</button>
                   {compareMonths.map((mm) => {
                     const active = monthFilter === mm;
                     return (
-                      <button
-                        key={mm}
-                        onClick={() => setMonthFilter(active ? '' : mm)}
-                        style={{
-                          flexShrink: 0, padding: '6px 14px', borderRadius: 20, minHeight: 44,
-                          border: `2px solid ${active ? COLORS.primary : COLORS.border}`,
-                          background: active ? COLORS.primaryLight : COLORS.card,
-                          color: active ? COLORS.tagText : COLORS.textLight,
-                          fontSize: 16, cursor: 'pointer', fontWeight: active ? 700 : 400,
-                        }}
-                      >{Number(mm)}月</button>
+                      <button key={mm} onClick={() => setMonthFilter(active ? '' : mm)} style={{
+                        flexShrink: 0, padding: '6px 14px', borderRadius: 20, minHeight: 44,
+                        border: `2px solid ${active ? COLORS.primary : COLORS.border}`,
+                        background: active ? COLORS.primaryLight : COLORS.card,
+                        color: active ? COLORS.tagText : COLORS.textLight,
+                        fontSize: 16, cursor: 'pointer', fontWeight: active ? 700 : 400,
+                      }}>{Number(mm)}月</button>
                     );
                   })}
                 </div>
@@ -278,8 +284,12 @@ export function TagScreen({ records, tags }) {
                 }}>
                   {leftYear ? `${leftYear}年` : '—'}
                 </div>
+                {/* 収穫集計（野菜タグのみ） */}
+                {leftYear && isVeggieTag && (
+                  <HarvestSummary records={leftRecords} year={leftYear} />
+                )}
                 {!leftYear ? null : leftRecords.length === 0 ? (
-                  <div style={{ fontSize: 15, color: COLORS.textLight, textAlign: 'center', paddingTop: 20 }}>
+                  <div style={{ fontSize: 15, color: COLORS.textLight, textAlign: 'center', paddingTop: 16 }}>
                     記録なし
                   </div>
                 ) : (
@@ -295,8 +305,12 @@ export function TagScreen({ records, tags }) {
                 }}>
                   {rightYear ? `${rightYear}年` : '—'}
                 </div>
+                {/* 収穫集計（野菜タグのみ） */}
+                {rightYear && isVeggieTag && (
+                  <HarvestSummary records={rightRecords} year={rightYear} />
+                )}
                 {!rightYear ? null : rightRecords.length === 0 ? (
-                  <div style={{ fontSize: 15, color: COLORS.textLight, textAlign: 'center', paddingTop: 20 }}>
+                  <div style={{ fontSize: 15, color: COLORS.textLight, textAlign: 'center', paddingTop: 16 }}>
                     記録なし
                   </div>
                 ) : (

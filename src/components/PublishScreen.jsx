@@ -47,14 +47,15 @@ async function publishRecord(record, apiKey) {
   }
 
   const body = {
-    id:          record.id,
-    category:    record.category ?? 'veggie',
-    date:        record.date,
-    time:        record.time ?? '',
-    comment:     record.comment ?? '',
-    text:        record.text ?? '',
-    tags:        record.tags ?? [],
+    id:           record.id,
+    category:     record.category ?? 'veggie',
+    date:         record.date,
+    time:         record.time ?? '',
+    comment:      record.comment ?? '',
+    text:         record.text ?? '',
+    tags:         record.tags ?? [],
     imageBase64s,
+    harvestCount: record.harvestCount ?? null, // ← 追加
   };
 
   const res = await fetch(`${API_BASE}/publish`, {
@@ -79,14 +80,12 @@ function getCategoryIcon(r) {
   return '🥬';
 }
 
-// 記録のサムネイルBase64を返す
 function getThumb(r) {
   if (r.imageBase64) return r.imageBase64;
   if (r.imageBase64s && r.imageBase64s.length > 0) return r.imageBase64s[0];
   return null;
 }
 
-// 記録の本文（コメントまたは日記テキスト）の冒頭を返す
 function getSnippet(r) {
   const src = r.text || r.comment || '';
   return src.length > 30 ? src.slice(0, 30) + '…' : src;
@@ -191,38 +190,30 @@ export function PublishScreen({ records, apiKey }) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {unpublished.map((r) => {
-                const checked  = selected.includes(r.id);
-                const thumb    = getThumb(r);
-                const snippet  = getSnippet(r);
-                const photoCount = r.imageBase64
-                  ? 1
-                  : (r.imageBase64s ?? []).length;
+                const checked    = selected.includes(r.id);
+                const thumb      = getThumb(r);
+                const snippet    = getSnippet(r);
+                const photoCount = r.imageBase64 ? 1 : (r.imageBase64s ?? []).length;
+                const hasHarvest = (r.category ?? 'veggie') === 'veggie'
+                  && (r.tags ?? []).includes('収穫')
+                  && r.harvestCount != null;
 
                 return (
-                  <div
-                    key={r.id}
-                    onClick={() => IS_OWNER && toggleSelect(r.id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      background: checked ? COLORS.primaryLight : COLORS.card,
-                      border: `1px solid ${checked ? COLORS.primary : COLORS.border}`,
-                      borderRadius: 10, overflow: 'hidden',
-                      cursor: IS_OWNER ? 'pointer' : 'default',
-                      minHeight: 72,
-                    }}
-                  >
+                  <div key={r.id} onClick={() => IS_OWNER && toggleSelect(r.id)} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    background: checked ? COLORS.primaryLight : COLORS.card,
+                    border: `1px solid ${checked ? COLORS.primary : COLORS.border}`,
+                    borderRadius: 10, overflow: 'hidden',
+                    cursor: IS_OWNER ? 'pointer' : 'default', minHeight: 72,
+                  }}>
                     {/* サムネイル */}
-                    <div style={{
-                      width: 72, height: 72, flexShrink: 0,
-                      background: '#E5E0D8', position: 'relative',
-                    }}>
+                    <div style={{ width: 72, height: 72, flexShrink: 0, background: '#E5E0D8', position: 'relative' }}>
                       {thumb ? (
                         <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
                         <div style={{
                           width: '100%', height: '100%',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 28,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
                         }}>{getCategoryIcon(r)}</div>
                       )}
                       {photoCount >= 2 && (
@@ -233,7 +224,6 @@ export function PublishScreen({ records, apiKey }) {
                         }}>📷{photoCount}</div>
                       )}
                     </div>
-
                     {/* テキスト */}
                     <div style={{ flex: 1, minWidth: 0, padding: '8px 8px 8px 0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -241,12 +231,17 @@ export function PublishScreen({ records, apiKey }) {
                         <span style={{ fontSize: 15, color: COLORS.textLight }}>
                           {r.date}{r.time ? ` ${r.time}` : ''}
                         </span>
+                        {hasHarvest && (
+                          <span style={{
+                            fontSize: 13, padding: '1px 6px', borderRadius: 10,
+                            background: COLORS.primaryLight, color: COLORS.primary, fontWeight: 700,
+                          }}>🌾{r.harvestCount}個</span>
+                        )}
                       </div>
                       {snippet && (
                         <div style={{
                           fontSize: 16, color: COLORS.text, lineHeight: 1.4,
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          marginBottom: 4,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4,
                         }}>{snippet}</div>
                       )}
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -258,7 +253,6 @@ export function PublishScreen({ records, apiKey }) {
                         ))}
                       </div>
                     </div>
-
                     {/* チェックボックス */}
                     {IS_OWNER && (
                       <div style={{
@@ -291,13 +285,15 @@ export function PublishScreen({ records, apiKey }) {
               {published.map((r) => {
                 const thumb   = getThumb(r);
                 const snippet = getSnippet(r);
+                const hasHarvest = (r.category ?? 'veggie') === 'veggie'
+                  && (r.tags ?? []).includes('収穫')
+                  && r.harvestCount != null;
                 return (
                   <div key={r.id} style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     background: COLORS.card, border: `1px solid ${COLORS.border}`,
                     borderRadius: 10, overflow: 'hidden',
                   }}>
-                    {/* サムネイル */}
                     <div style={{ width: 64, height: 64, flexShrink: 0, background: '#E5E0D8' }}>
                       {thumb ? (
                         <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -314,6 +310,12 @@ export function PublishScreen({ records, apiKey }) {
                         <span style={{ fontSize: 15, color: COLORS.textLight }}>
                           {r.date}{r.time ? ` ${r.time}` : ''}
                         </span>
+                        {hasHarvest && (
+                          <span style={{
+                            fontSize: 13, padding: '1px 6px', borderRadius: 10,
+                            background: COLORS.primaryLight, color: COLORS.primary, fontWeight: 700,
+                          }}>🌾{r.harvestCount}個</span>
+                        )}
                       </div>
                       {snippet && (
                         <div style={{
@@ -335,7 +337,7 @@ export function PublishScreen({ records, apiKey }) {
         </div>
       </div>
 
-      {/* 公開ボタン（オーナーのみ） */}
+      {/* 公開ボタン */}
       {IS_OWNER && (
         <div style={{
           padding: '12px 16px', background: COLORS.card,
@@ -346,17 +348,13 @@ export function PublishScreen({ records, apiKey }) {
               {progress}
             </div>
           )}
-          <button
-            onClick={handlePublish}
-            disabled={selected.length === 0 || publishing}
-            style={{
-              width: '100%', padding: '16px', borderRadius: 8, minHeight: 56,
-              border: 'none', background: COLORS.primary,
-              color: '#fff', fontSize: 18, fontWeight: 600,
-              cursor: (selected.length === 0 || publishing) ? 'not-allowed' : 'pointer',
-              opacity: (selected.length === 0 || publishing) ? 0.5 : 1,
-            }}
-          >
+          <button onClick={handlePublish} disabled={selected.length === 0 || publishing} style={{
+            width: '100%', padding: '16px', borderRadius: 8, minHeight: 56,
+            border: 'none', background: COLORS.primary,
+            color: '#fff', fontSize: 18, fontWeight: 600,
+            cursor: (selected.length === 0 || publishing) ? 'not-allowed' : 'pointer',
+            opacity: (selected.length === 0 || publishing) ? 0.5 : 1,
+          }}>
             {publishing
               ? '公開中…'
               : selected.length > 0

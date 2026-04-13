@@ -34,9 +34,7 @@ export async function compressImage(file) {
       if (!dataUrl) { reject(new Error('dataUrl取得失敗')); return; }
 
       const img = new Image();
-      img.onerror = () => {
-        resolve(dataUrl);
-      };
+      img.onerror = () => { resolve(dataUrl); };
       img.onload = () => {
         try {
           const MAX = 1280;
@@ -62,7 +60,6 @@ export async function compressImage(file) {
   });
 }
 
-// Base64文字列からBlobURLを生成（画像表示用）
 export function createImageUrl(imageData) {
   if (!imageData) return null;
   if (typeof imageData === 'string') return imageData;
@@ -84,8 +81,7 @@ export async function getRecord(id) { return get(id, recordsStore); }
 
 // ─── addRecord ───────────────────────────────────────────────────────────────
 // 全カテゴリ共通: コンポーネント側で圧縮済みのBase64を受け取る。
-// ここでは圧縮しない。
-// veggie  : data.imageBase64（文字列 | null）
+// veggie  : data.imageBase64（文字列 | null）、data.harvestCount（数値 | null）
 // bed/diary: data.imageBase64s（文字列配列）
 // ─────────────────────────────────────────────────────────────────────────────
 export async function addRecord(data) {
@@ -111,11 +107,16 @@ export async function addRecord(data) {
       archived: false, published: false, createdAt: now, updatedAt: now,
     };
   } else {
+    // veggie: harvestCountは「収穫」タグがある場合のみ有効
+    const harvestCount = (data.tags ?? []).includes('収穫') && data.harvestCount != null
+      ? Number(data.harvestCount)
+      : null;
     record = {
       id, category: 'veggie',
       date: data.date ?? '', time: data.time ?? '',
       imageBase64: data.imageBase64 ?? null,
       comment: data.comment ?? '', tags: data.tags ?? [],
+      harvestCount,
       archived: false, published: false, createdAt: now, updatedAt: now,
     };
   }
@@ -129,8 +130,8 @@ export async function addRecord(data) {
 }
 
 // ─── updateRecord ─────────────────────────────────────────────────────────────
-// 全カテゴリ共通: コンポーネント側で圧縮済みのBase64を受け取る。
 // veggie  : updates.imageBase64 が渡された場合のみ上書き
+//           updates.harvestCount が渡された場合のみ上書き
 // bed/diary: updates.imageBase64s が渡された場合のみ上書き
 // ─────────────────────────────────────────────────────────────────────────────
 export async function updateRecord(id, updates) {
@@ -138,20 +139,17 @@ export async function updateRecord(id, updates) {
   if (!existing) throw new Error('記録が見つかりません: ' + id);
   const category = existing.category ?? 'veggie';
 
-  // imageBase64 / imageBase64s は個別処理するため destructure して除外
   const { imageBase64: newImageBase64, imageBase64s: newBase64s, ...restUpdates } = updates;
   const base = { ...existing, ...restUpdates, updatedAt: Date.now() };
 
   if (category === 'veggie') {
-    // 新しい画像が渡されたときのみ上書き（undefined の場合は既存を保持）
-    if (newImageBase64 !== undefined) {
-      base.imageBase64 = newImageBase64;
-    }
+    if (newImageBase64 !== undefined) base.imageBase64 = newImageBase64;
+    // harvestCountはrestUpdatesに含まれるのでそのまま反映される
+    // 「収穫」タグが外れた場合はnullにリセット
+    const tags = base.tags ?? [];
+    if (!tags.includes('収穫')) base.harvestCount = null;
   } else {
-    // bed / diary: 配列ごと置き換え（undefined の場合は既存を保持）
-    if (newBase64s !== undefined) {
-      base.imageBase64s = newBase64s;
-    }
+    if (newBase64s !== undefined) base.imageBase64s = newBase64s;
   }
 
   await set(id, base, recordsStore);
