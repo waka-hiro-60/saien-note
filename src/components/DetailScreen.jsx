@@ -208,9 +208,11 @@ export function DetailScreen({ record, onClose, records, tags }) {
   // veggie: 閲覧モード表示
   const [viewImgBase64, setViewImgBase64] = useState(null);
   useEffect(() => {
-    if (category !== 'veggie' || !record.imageBlob) { setViewImgBase64(null); return; }
-    blobToBase64(record.imageBlob).then(setViewImgBase64);
-  }, [record.imageBlob, category]);
+    if (category !== 'veggie') { setViewImgBase64(null); return; }
+    if (record.imageBase64) { setViewImgBase64(record.imageBase64); return; }
+    if (record.imageBlob) { blobToBase64(record.imageBlob).then(setViewImgBase64); return; }
+    setViewImgBase64(null);
+  }, [record.imageBase64, record.imageBlob, category]);
 
   // veggie: 編集モードで新しいファイルを選択したときのプレビュー
   const [editImageFile,  setEditImageFile]  = useState(null);
@@ -227,16 +229,20 @@ export function DetailScreen({ record, onClose, records, tags }) {
   useEffect(() => {
     if (!editMode || category === 'veggie') return;
 
+    // 新フォーマット: imageBase64s（文字列配列）
+    if (record.imageBase64s) {
+      setAllImageBase64([...record.imageBase64s]);
+      return;
+    }
+    // 旧フォーマット: images（Blob配列）
     const blobs = record.images ?? [];
     if (blobs.length === 0) { setAllImageBase64([]); return; }
-
     let cancelled = false;
     Promise.all(blobs.map(blobToBase64)).then((results) => {
       if (!cancelled) setAllImageBase64(results.filter(Boolean));
     });
-
     return () => { cancelled = true; };
-  }, [editMode, record.images, category]);
+  }, [editMode, record.imageBase64s, record.images, category]);
 
   // 写真追加（bed/diary）: FileReader で base64 化してから追記
   const handleAddImages = (files) => {
@@ -303,12 +309,11 @@ export function DetailScreen({ record, onClose, records, tags }) {
       } else if (category === 'bed') {
         updates.comment = editComment;
         updates.tags    = editTags;
-        // base64 → Blob に戻して渡す（images: Blob[] で全置き換え）
-        updates.images  = allImageBase64.map(base64ToBlob);
+        updates.imageBase64s = allImageBase64;
       } else {
         // diary
-        updates.text   = editText;
-        updates.images = allImageBase64.map(base64ToBlob);
+        updates.text         = editText;
+        updates.imageBase64s = allImageBase64;
       }
 
       await records.update(record.id, updates);
@@ -460,8 +465,8 @@ export function DetailScreen({ record, onClose, records, tags }) {
         {category === 'bed' && (
           <>
             <ImageGrid
-              blobs={editMode ? undefined : (record.images ?? [])}
-              srcs={editMode ? allImageBase64 : undefined}
+              blobs={undefined}
+              srcs={editMode ? allImageBase64 : (record.imageBase64s ?? [])}
               editable={editMode}
               onRemove={handleRemoveImage}
             />
@@ -508,8 +513,8 @@ export function DetailScreen({ record, onClose, records, tags }) {
         {category === 'diary' && (
           <>
             <ImageGrid
-              blobs={editMode ? undefined : (record.images ?? [])}
-              srcs={editMode ? allImageBase64 : undefined}
+              blobs={undefined}
+              srcs={editMode ? allImageBase64 : (record.imageBase64s ?? [])}
               editable={editMode}
               onRemove={handleRemoveImage}
             />

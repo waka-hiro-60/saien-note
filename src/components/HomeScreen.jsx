@@ -42,20 +42,17 @@ function getCategoryOrder(category) {
   return 2; // veggie
 }
 
-// 記録のサムネイルBlobを返す（veggie: imageBlob、bed/diary: images[0]）
+// 記録のサムネイルSrcを返す（Base64文字列）
 function getThumbBlob(record) {
-  if ((record.category ?? 'veggie') === 'veggie') return record.imageBlob;
-  return (record.images ?? [])[0] ?? null;
+  if ((record.category ?? 'veggie') === 'veggie') return record.imageBase64 ?? null;
+  return (record.imageBase64s ?? [])[0] ?? null;
 }
 
 // 記録の写真枚数を返す
 function getPhotoCount(record) {
   const cat = record.category ?? 'veggie';
-  if (cat === 'veggie') {
-    if (record.images && record.images.length > 0) return record.images.length;
-    return record.imageBlob ? 1 : 0;
-  }
-  return (record.images ?? []).length;
+  if (cat === 'veggie') return record.imageBase64 ? 1 : 0;
+  return (record.imageBase64s ?? []).length;
 }
 
 // 写真枚数バッジ（2枚以上のときのみ表示）
@@ -79,16 +76,8 @@ function PhotoCountBadge({ count }) {
 // 画像コンポーネント
 // ─────────────────────────────────────────
 
-function RecordImage({ blob, placeholder = '🌿', style = {} }) {
-  const [url, setUrl] = useState(null);
-  useEffect(() => {
-    if (!blob) return;
-    const u = URL.createObjectURL(blob);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [blob]);
-
-  if (!url) {
+function RecordImage({ blob: src, placeholder = '🌿', style = {} }) {
+  if (!src) {
     return (
       <div style={{
         width: '100%', height: '100%',
@@ -98,7 +87,7 @@ function RecordImage({ blob, placeholder = '🌿', style = {} }) {
       }}>{placeholder}</div>
     );
   }
-  return <img src={url} alt="記録" style={{ width: '100%', height: '100%', objectFit: 'cover', ...style }} />;
+  return <img src={src} alt="記録" style={{ width: '100%', height: '100%', objectFit: 'cover', ...style }} />;
 }
 
 // ─────────────────────────────────────────
