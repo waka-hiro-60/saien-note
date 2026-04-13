@@ -18,24 +18,34 @@ export const DEFAULT_TAGS = {
   場所: ['畝1', '畝2', '畝3', '畝4', '畝5'],
 };
 
-// FileをBlobに変換（IndexedDB互換・iOS Safari対応）
+function errMsg(e) {
+  if (e == null) return 'null例外';
+  if (typeof e === 'string') return e;
+  return e.message ?? e.name ?? String(e);
+}
+
 function fileToBlob(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('ファイル読み込み失敗'));
-    reader.onload = (e) => resolve(new Blob([e.target.result], { type: file.type || 'image/jpeg' }));
+    reader.onerror = () => reject(new Error('fileToBlob:読み込み失敗'));
+    reader.onload = (e) => {
+      try {
+        resolve(new Blob([e.target.result], { type: file.type || 'image/jpeg' }));
+      } catch (err) {
+        reject(new Error('fileToBlob:Blob生成失敗:' + errMsg(err)));
+      }
+    };
     reader.readAsArrayBuffer(file);
   });
 }
 
-// canvas圧縮を試みる
 function compressViaCanvas(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('ファイル読み込み失敗'));
+    reader.onerror = () => reject(new Error('canvas:FileReader失敗'));
     reader.onload = (e) => {
       const img = new Image();
-      img.onerror = () => reject(new Error('画像読み込み失敗'));
+      img.onerror = () => reject(new Error('canvas:Image読み込み失敗'));
       img.onload = () => {
         try {
           const MAX = 1280;
@@ -47,18 +57,18 @@ function compressViaCanvas(file) {
           const canvas = document.createElement('canvas');
           canvas.width = width; canvas.height = height;
           const ctx = canvas.getContext('2d');
-          if (!ctx) { reject(new Error('canvas取得失敗')); return; }
+          if (!ctx) { reject(new Error('canvas:getContext失敗')); return; }
           ctx.drawImage(img, 0, 0, width, height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-          if (!dataUrl || dataUrl === 'data:,') { reject(new Error('変換失敗')); return; }
+          if (!dataUrl || dataUrl === 'data:,') { reject(new Error('canvas:toDataURL失敗')); return; }
           const parts = dataUrl.split(',');
-          if (parts.length < 2) { reject(new Error('解析失敗')); return; }
+          if (parts.length < 2) { reject(new Error('canvas:split失敗')); return; }
           const bin = atob(parts[1]);
           const arr = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
           resolve(new Blob([arr], { type: 'image/jpeg' }));
         } catch (err) {
-          reject(new Error('圧縮失敗'));
+          reject(new Error('canvas:処理失敗:' + errMsg(err)));
         }
       };
       img.src = e.target.result;
@@ -67,17 +77,15 @@ function compressViaCanvas(file) {
   });
 }
 
-// 圧縮失敗時はFile→Blobに変換して返す（圧縮なし・iOS Safari対応）
 export async function compressImage(file) {
   try {
     return await compressViaCanvas(file);
   } catch (err) {
-    console.warn('canvas圧縮失敗。Blob変換にフォールバック:', err);
+    console.warn('canvas圧縮失敗(' + errMsg(err) + ')→Blobフォールバック');
     try {
       return await fileToBlob(file);
     } catch (err2) {
-      console.warn('Blob変換も失敗:', err2);
-      throw new Error('画像の保存に失敗しました');
+      throw new Error('画像変換失敗:canvas=' + errMsg(err) + ',blob=' + errMsg(err2));
     }
   }
 }
@@ -105,23 +113,32 @@ export async function addRecord(data) {
     const images = [];
     const fileList = Array.from(data.imageFiles ?? []);
     for (let i = 0; i < fileList.length; i++) {
-      images.push(await compressImage(fileList[i]));
+      try { images.push(await compressImage(fileList[i])); }
+      catch (e) { throw new Error('diary画像' + (i+1) + '枚目失敗:' + errMsg(e)); }
     }
     record = { id, category: 'diary', date: data.date ?? '', time: data.time ?? '', images, text: data.text ?? '', archived: false, published: false, createdAt: now, updatedAt: now };
   } else if (category === 'bed') {
     const images = [];
     const fileList = Array.from(data.imageFiles ?? []);
     for (let i = 0; i < fileList.length; i++) {
-      images.push(await compressImage(fileList[i]));
+      try { images.push(await compressImage(fileList[i])); }
+      catch (e) { throw new Error('bed画像' + (i+1) + '枚目失敗:' + errMsg(e)); }
     }
     record = { id, category: 'bed', date: data.date ?? '', time: data.time ?? '', images, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
   } else {
     let imageBlob = null;
-    if (data.imageFile) { imageBlob = await compressImage(data.imageFile); }
+    if (data.imageFile) {
+      try { imageBlob = await compressImage(data.imageFile); }
+      catch (e) { throw new Error('veggie画像失敗:' + errMsg(e)); }
+    }
     record = { id, category: 'veggie', date: data.date ?? '', time: data.time ?? '', imageBlob, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
   }
 
-  await set(id, record, recordsStore);
+  try {
+    await set(id, record, recordsStore);
+  } catch (e) {
+    throw new Error('IndexedDB保存失敗:' + errMsg(e));
+  }
   return record;
 }
 
