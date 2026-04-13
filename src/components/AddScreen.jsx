@@ -20,7 +20,7 @@ async function getDateTimeFromFile(file) {
     }
     console.log('[Exif] DateTimeOriginal が取得できなかった。File.lastModified を試みる…');
   } catch (e) {
-    console.log('[Exif] exifr.parse() 失敗 (iOS等):', e.message, '→ File.lastModified を試みる…');
+    console.log('[Exif] exifr.parse() 失敗 (iOS等):', e != null ? e.message : 'null error', '→ File.lastModified を試みる…');
   }
 
   // ② File.lastModified をフォールバックとして使用
