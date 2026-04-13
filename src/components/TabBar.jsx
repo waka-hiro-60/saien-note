@@ -9,7 +9,7 @@ const COLORS = {
 
 const ALL_TABS = [
   { id: 'home',    label: 'ホーム',  icon: '🏠' },
-  { id: 'tag',     label: 'タグ',    icon: '🏷️' },
+  { id: 'tag',     label: '比較',    icon: '📊' },
   { id: 'add',     label: '追加',    icon: '➕', isCenter: true },
   { id: 'publish', label: '公開',    icon: '🌐', ownerOnly: true },
   { id: 'setting', label: '設定',    icon: '⚙️' },
