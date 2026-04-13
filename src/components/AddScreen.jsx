@@ -1,5 +1,6 @@
 // src/components/AddScreen.jsx
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { compressImage } from '../utils/db';
 
 // 画像ファイルから日時を取得して { date: 'YYYY-MM-DD', time: 'HH:MM' } を返す
 // ① exifr の DateTimeOriginal → ② File.lastModified → ③ null（今日の日付のまま）
@@ -76,21 +77,14 @@ function toLocalTime() {
 }
 
 // 複数画像プレビューコンポーネント
-function MultiImagePreview({ files, onRemove, onAddCamera, onAddAlbum, cameraRef, albumRef }) {
-  const [urls, setUrls] = useState([]);
-
-  useEffect(() => {
-    const created = files.map((f) => URL.createObjectURL(f));
-    setUrls(created);
-    return () => created.forEach((u) => URL.revokeObjectURL(u));
-  }, [files]);
+function MultiImagePreview({ files: srcs, onRemove, onAddCamera, onAddAlbum, cameraRef, albumRef }) {
 
   return (
     <div style={{ padding: 12, background: '#111' }}>
-      {urls.length > 0 && (
+      {srcs.length > 0 && (
         <>
           <div style={{ color: '#ccc', fontSize: 15, marginBottom: 8, fontWeight: 600 }}>
-            写真 {files.length}枚
+            写真 {srcs.length}枚
           </div>
           <div style={{
             display: 'grid',
@@ -98,10 +92,10 @@ function MultiImagePreview({ files, onRemove, onAddCamera, onAddAlbum, cameraRef
             gap: 6,
             marginBottom: 10,
           }}>
-          {urls.map((url, i) => (
+          {srcs.map((src, i) => (
             <div key={i} style={{ position: 'relative', paddingTop: '100%' }}>
               <img
-                src={url}
+                src={src}
                 alt=""
                 style={{
                   position: 'absolute', inset: 0,
@@ -242,7 +236,7 @@ function SingleImagePreview({ imageFile, onCamera, onAlbum, cameraRef, albumRef 
 export function AddScreen({ records, tags, onDone }) {
   const [mode,       setMode]       = useState('veggie');
   const [imageFile,  setImageFile]  = useState(null);   // veggie用
-  const [imageFiles, setImageFiles] = useState([]);     // bed/diary用
+  const [imageBase64s, setImageBase64s] = useState([]); // bed/diary用（Base64文字列配列）
   const [date,       setDate]       = useState(toLocalDate());
   const [time,       setTime]       = useState(toLocalTime());
   const [comment,    setComment]    = useState('');
@@ -261,7 +255,7 @@ export function AddScreen({ records, tags, onDone }) {
   // モード変更時にリセット
   useEffect(() => {
     setImageFile(null);
-    setImageFiles([]);
+    setImageBase64s([]);
     setSelTags([]);
     setComment('');
     setText('');
@@ -295,15 +289,22 @@ export function AddScreen({ records, tags, onDone }) {
     });
   }, [mode, veggieTags, placeTags, bedVeggieMap]);
 
-  // ─── bed/diary 複数画像操作 ───
-  const addImageFiles = (files) => {
-    // FileList は input がリセットされると空になるので、先に配列へ変換する
+  // ─── bed/diary 複数画像操作（選択直後にBase64変換・iOS Safari対応） ───
+  const addImageFiles = async (files, inputRef) => {
     const arr = Array.from(files);
-    setImageFiles((prev) => [...prev, ...arr]);
+    if (inputRef?.current) inputRef.current.value = '';
+    for (const file of arr) {
+      try {
+        const base64 = await compressImage(file);
+        if (base64) setImageBase64s((prev) => [...prev, base64]);
+      } catch (e) {
+        console.warn('画像変換失敗:', e);
+      }
+    }
   };
 
   const removeImageFile = (index) => {
-    setImageFiles((prev) => prev.filter((_, i) => i !== index));
+    setImageBase64s((prev) => prev.filter((_, i) => i !== index));
   };
 
   // ─── 保存 ───
@@ -312,19 +313,17 @@ export function AddScreen({ records, tags, onDone }) {
     setError(null);
     try {
       if (mode === 'diary') {
-        console.log('[handleSave] diary 保存開始 imageFiles:', imageFiles.length, '枚', imageFiles.map((f) => `${f.name}(${f.size}bytes)`));
         await records.add({
           category: 'diary',
           date, time,
-          imageFiles,
+          imageBase64s,
           text,
         });
       } else if (mode === 'bed') {
-        console.log('[handleSave] bed 保存開始 imageFiles:', imageFiles.length, '枚', imageFiles.map((f) => `${f.name}(${f.size}bytes)`));
         await records.add({
           category: 'bed',
           date, time,
-          imageFiles,
+          imageBase64s,
           comment,
           tags: selTags,
         });
@@ -405,7 +404,7 @@ export function AddScreen({ records, tags, onDone }) {
           />
         ) : (
           <MultiImagePreview
-            files={imageFiles}
+            files={imageBase64s}
             onRemove={removeImageFile}
             cameraRef={cameraRef}
             albumRef={albumRef}
@@ -426,13 +425,10 @@ export function AddScreen({ records, tags, onDone }) {
               const dt = await getDateTimeFromFile(file);
               if (dt) { setDate(dt.date); setTime(dt.time); }
             } else {
-              const isFirst = imageFiles.length === 0;
-              addImageFiles([file]);
-              e.target.value = '';
-              if (isFirst) {
-                const dt = await getDateTimeFromFile(file);
-                if (dt) { setDate(dt.date); setTime(dt.time); }
-              }
+              const isFirst = imageBase64s.length === 0;
+              const dt = isFirst ? await getDateTimeFromFile(file) : null;
+              await addImageFiles([file], cameraRef);
+              if (isFirst && dt) { setDate(dt.date); setTime(dt.time); }
             }
           }}
         />
@@ -449,13 +445,10 @@ export function AddScreen({ records, tags, onDone }) {
               const dt = await getDateTimeFromFile(files[0]);
               if (dt) { setDate(dt.date); setTime(dt.time); }
             } else {
-              const isFirst = imageFiles.length === 0;
-              addImageFiles(files);
-              e.target.value = '';
-              if (isFirst) {
-                const dt = await getDateTimeFromFile(files[0]);
-                if (dt) { setDate(dt.date); setTime(dt.time); }
-              }
+              const isFirst = imageBase64s.length === 0;
+              const dt = isFirst ? await getDateTimeFromFile(files[0]) : null;
+              await addImageFiles(files, albumRef);
+              if (isFirst && dt) { setDate(dt.date); setTime(dt.time); }
             }
           }}
         />

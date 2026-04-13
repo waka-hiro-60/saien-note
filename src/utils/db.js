@@ -112,20 +112,24 @@ export async function addRecord(data) {
   let record;
 
   if (category === 'diary') {
-    const images = [];
-    const fileList = Array.from(data.imageFiles ?? []);
-    for (let i = 0; i < fileList.length; i++) {
-      try { images.push(await compressImage(fileList[i])); }
-      catch (e) { throw new Error('diary画像' + (i+1) + '枚目失敗:' + errMsg(e)); }
+    // imageBase64s（既変換済み）があればそのまま使う、なければFileから変換
+    let images = data.imageBase64s ?? [];
+    if (images.length === 0 && data.imageFiles) {
+      const fileList = Array.from(data.imageFiles);
+      for (let i = 0; i < fileList.length; i++) {
+        try { images.push(await compressImage(fileList[i])); }
+        catch (e) { throw new Error('diary画像' + (i+1) + '枚目失敗:' + errMsg(e)); }
+      }
     }
-    // Base64文字列として保存（BlobではなくString）
     record = { id, category: 'diary', date: data.date ?? '', time: data.time ?? '', imageBase64s: images, text: data.text ?? '', archived: false, published: false, createdAt: now, updatedAt: now };
   } else if (category === 'bed') {
-    const images = [];
-    const fileList = Array.from(data.imageFiles ?? []);
-    for (let i = 0; i < fileList.length; i++) {
-      try { images.push(await compressImage(fileList[i])); }
-      catch (e) { throw new Error('bed画像' + (i+1) + '枚目失敗:' + errMsg(e)); }
+    let images = data.imageBase64s ?? [];
+    if (images.length === 0 && data.imageFiles) {
+      const fileList = Array.from(data.imageFiles);
+      for (let i = 0; i < fileList.length; i++) {
+        try { images.push(await compressImage(fileList[i])); }
+        catch (e) { throw new Error('bed画像' + (i+1) + '枚目失敗:' + errMsg(e)); }
+      }
     }
     record = { id, category: 'bed', date: data.date ?? '', time: data.time ?? '', imageBase64s: images, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
   } else {
