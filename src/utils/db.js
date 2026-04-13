@@ -2,10 +2,11 @@
 import { get, set, del, keys, createStore } from 'idb-keyval';
 
 // ─────────────────────────────────────────
-// ストア定義（2つ）
+// ストア定義（3つ）
 // ─────────────────────────────────────────
-export const recordsStore = createStore('saien-note-records', 'records');
-export const tagsStore    = createStore('saien-note-tags', 'tags');
+export const recordsStore  = createStore('saien-note-records',  'records');
+export const tagsStore     = createStore('saien-note-tags',     'tags');
+export const settingsStore = createStore('saien-note-settings', 'settings');
 
 // ─────────────────────────────────────────
 // タグ初期データ
@@ -80,9 +81,6 @@ export async function compressImage(file) {
 // Records CRUD
 // ─────────────────────────────────────────
 
-/**
- * 全記録を取得（撮影日時の新しい順）
- */
 export async function getAllRecords() {
   const allKeys = await keys(recordsStore);
   if (allKeys.length === 0) return [];
@@ -100,21 +98,10 @@ export async function getAllRecords() {
     });
 }
 
-/**
- * 1件取得
- */
 export async function getRecord(id) {
   return get(id, recordsStore);
 }
 
-/**
- * 新規記録を保存
- * category: 'veggie' | 'bed' | 'diary'
- *
- * veggie: { category, date, time, imageFile, comment, tags }
- * bed:    { category, date, time, imageFiles, comment, tags }
- * diary:  { category, date, time, imageFiles, text }
- */
 export async function addRecord(data) {
   const now      = Date.now();
   const id       = crypto.randomUUID();
@@ -125,14 +112,11 @@ export async function addRecord(data) {
   if (category === 'diary') {
     const images = [];
     const fileList = Array.from(data.imageFiles ?? []);
-    console.log(`[addRecord] diary: ${fileList.length} 枚の画像を圧縮開始`);
     for (let i = 0; i < fileList.length; i++) {
       try {
         const blob = await compressImage(fileList[i]);
         images.push(blob);
-        console.log(`[addRecord] diary: ${i + 1}/${fileList.length} 枚目 圧縮完了 (${blob.size} bytes)`);
       } catch (e) {
-        console.error(`[addRecord] diary: ${i + 1}/${fileList.length} 枚目 圧縮失敗`, e);
         throw new Error(`画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
       }
     }
@@ -151,14 +135,11 @@ export async function addRecord(data) {
   } else if (category === 'bed') {
     const images = [];
     const fileList = Array.from(data.imageFiles ?? []);
-    console.log(`[addRecord] bed: ${fileList.length} 枚の画像を圧縮開始`);
     for (let i = 0; i < fileList.length; i++) {
       try {
         const blob = await compressImage(fileList[i]);
         images.push(blob);
-        console.log(`[addRecord] bed: ${i + 1}/${fileList.length} 枚目 圧縮完了 (${blob.size} bytes)`);
       } catch (e) {
-        console.error(`[addRecord] bed: ${i + 1}/${fileList.length} 枚目 圧縮失敗`, e);
         throw new Error(`画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
       }
     }
@@ -176,7 +157,6 @@ export async function addRecord(data) {
       updatedAt: now,
     };
   } else {
-    // veggie (既存互換)
     let imageBlob = null;
     if (data.imageFile) {
       imageBlob = await compressImage(data.imageFile);
@@ -200,21 +180,12 @@ export async function addRecord(data) {
   return record;
 }
 
-/**
- * 記録を更新
- * veggie用: updates に imageFile を含める
- * bed/diary用: updates に以下を含める
- *   - imageFiles: File[]       → 全画像を置き換え
- *   - addImageFiles: File[]    → 画像を追加
- *   - images: Blob[]           → Blob直接置き換え（削除後配列渡し用）
- */
 export async function updateRecord(id, updates) {
   const existing = await get(id, recordsStore);
   if (!existing) throw new Error(`記録が見つかりません: ${id}`);
 
   const category = existing.category ?? 'veggie';
 
-  // 画像関連フィールドを分離
   const {
     imageFile,
     imageFiles,
@@ -230,40 +201,30 @@ export async function updateRecord(id, updates) {
       base.imageBlob = await compressImage(imageFile);
     }
   } else {
-    // bed / diary
     let images = existing.images ?? [];
 
     if (newImagesArray !== undefined) {
-      // Blob[] 直接置き換え（UI上での削除後に渡す）— addImageFiles と併用可能
       images = newImagesArray;
     }
 
     if (imageFiles && imageFiles.length > 0) {
-      // ファイルで全画像を置き換え（newImagesArray より優先）
       const fileList = Array.from(imageFiles);
       images = [];
-      console.log(`[updateRecord] imageFiles: ${fileList.length} 枚の画像を圧縮開始`);
       for (let i = 0; i < fileList.length; i++) {
         try {
           const blob = await compressImage(fileList[i]);
           images.push(blob);
-          console.log(`[updateRecord] ${i + 1}/${fileList.length} 枚目 圧縮完了 (${blob.size} bytes)`);
         } catch (e) {
-          console.error(`[updateRecord] ${i + 1}/${fileList.length} 枚目 圧縮失敗`, e);
           throw new Error(`画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
         }
       }
     } else if (addImageFiles && addImageFiles.length > 0) {
-      // 既存（削除反映済み）配列に追記
       const fileList = Array.from(addImageFiles);
-      console.log(`[updateRecord] addImageFiles: ${fileList.length} 枚の画像を圧縮開始`);
       for (let i = 0; i < fileList.length; i++) {
         try {
           const blob = await compressImage(fileList[i]);
           images.push(blob);
-          console.log(`[updateRecord] 追加 ${i + 1}/${fileList.length} 枚目 圧縮完了 (${blob.size} bytes)`);
         } catch (e) {
-          console.error(`[updateRecord] 追加 ${i + 1}/${fileList.length} 枚目 圧縮失敗`, e);
           throw new Error(`追加画像 ${i + 1} 枚目の圧縮に失敗しました: ${e.message}`);
         }
       }
@@ -276,34 +237,22 @@ export async function updateRecord(id, updates) {
   return base;
 }
 
-/**
- * 記録を削除
- */
 export async function deleteRecord(id) {
   await del(id, recordsStore);
 }
 
-/**
- * アーカイブ状態を切り替え
- */
 export async function toggleArchive(id) {
   const record = await get(id, recordsStore);
   if (!record) throw new Error(`記録が見つかりません: ${id}`);
   return updateRecord(id, { archived: !record.archived });
 }
 
-/**
- * まとめて公開
- */
 export async function publishRecords(ids) {
   await Promise.all(
     ids.map((id) => updateRecord(id, { published: true }))
   );
 }
 
-/**
- * 非公開に戻す
- */
 export async function unpublishRecord(id) {
   return updateRecord(id, { published: false });
 }
@@ -342,8 +291,7 @@ export async function removeTag(category, tag) {
 }
 
 // ─────────────────────────────────────────
-// 畝↔野菜マッピング（tagsStoreに保存）
-// 例: { '畝1': ['トマト（大玉）', 'トマト（中玉）'], '畝2': ['キュウリ'] }
+// 畝↔野菜マッピング
 // ─────────────────────────────────────────
 
 export async function getBedVeggieMap() {
@@ -353,4 +301,16 @@ export async function getBedVeggieMap() {
 
 export async function saveBedVeggieMap(map) {
   await set('bedVeggieMap', map, tagsStore);
+}
+
+// ─────────────────────────────────────────
+// Settings（APIキーなど）
+// ─────────────────────────────────────────
+
+export async function getApiKey() {
+  return (await get('apiKey', settingsStore)) ?? '';
+}
+
+export async function saveApiKey(key) {
+  await set('apiKey', key.trim(), settingsStore);
 }

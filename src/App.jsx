@@ -8,6 +8,7 @@ import { PublishScreen } from './components/PublishScreen';
 import { SettingScreen } from './components/SettingScreen';
 import { useRecords }    from './hooks/useRecords';
 import { useTags }       from './hooks/useTags';
+import { useSettings }   from './hooks/useSettings';
 
 const COLORS = {
   bg: '#F7F5F0',
@@ -30,16 +31,24 @@ export default function App() {
     };
   }, []);
 
-  const recordsHook = useRecords();
-  const tagsHook    = useTags();
+  const recordsHook  = useRecords();
+  const tagsHook     = useTags();
+  const settingsHook = useSettings();
+
+  // APIキーがない状態で公開タブにいた場合はhomeに戻す
+  useEffect(() => {
+    if (!settingsHook.loading && !settingsHook.apiKey && activeTab === 'publish') {
+      setActiveTab('home');
+    }
+  }, [settingsHook.apiKey, settingsHook.loading, activeTab]);
 
   const renderScreen = () => {
     switch (activeTab) {
       case 'home':    return <HomeScreen    records={recordsHook} tags={tagsHook} />;
       case 'add':     return <AddScreen     records={recordsHook} tags={tagsHook} onDone={() => setActiveTab('home')} />;
       case 'tag':     return <TagScreen     records={recordsHook} tags={tagsHook} />;
-      case 'publish': return <PublishScreen records={recordsHook} />;
-      case 'setting': return <SettingScreen tags={tagsHook} records={recordsHook} />;
+      case 'publish': return <PublishScreen records={recordsHook} apiKey={settingsHook.apiKey} />;
+      case 'setting': return <SettingScreen tags={tagsHook} records={recordsHook} settings={settingsHook} />;
       default:        return null;
     }
   };
@@ -77,8 +86,12 @@ export default function App() {
         {renderScreen()}
       </div>
 
-      {/* タブバー */}
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      {/* タブバー（APIキーがある場合のみ公開タブを表示） */}
+      <TabBar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        showPublish={!!settingsHook.apiKey}
+      />
     </div>
   );
 }

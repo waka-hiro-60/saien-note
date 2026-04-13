@@ -14,8 +14,7 @@ const COLORS = {
   tagText:      '#3A6B47',
 };
 
-const IS_OWNER     = import.meta.env.VITE_OWNER_MODE === 'true';
-const API_BASE     = 'https://api.saien.career-life.tech';
+const API_BASE = 'https://api.saien.career-life.tech';
 
 // Blob → base64文字列
 function blobToBase64(blob) {
@@ -29,7 +28,6 @@ function blobToBase64(blob) {
 
 // 1件の記録をWorkerに送信
 async function publishRecord(record, apiKey) {
-  // 画像をbase64に変換
   const imageBase64s = [];
   const images = record.images ?? (record.imageBlob ? [record.imageBlob] : []);
   for (const blob of images) {
@@ -72,7 +70,7 @@ function getCategoryIcon(r) {
   return '🥬';
 }
 
-export function PublishScreen({ records }) {
+export function PublishScreen({ records, apiKey }) {
   const [selected,   setSelected]   = useState([]);
   const [publishing, setPublishing] = useState(false);
   const [progress,   setProgress]   = useState('');
@@ -91,10 +89,9 @@ export function PublishScreen({ records }) {
   const clearAll  = () => setSelected([]);
 
   const handlePublish = async () => {
-    if (!IS_OWNER || selected.length === 0) return;
-    const apiKey = import.meta.env.VITE_API_KEY;
+    if (selected.length === 0) return;
     if (!apiKey) {
-      setError('VITE_API_KEY が設定されていません');
+      setError('APIキーが設定されていません（設定画面で入力してください）');
       return;
     }
 
@@ -121,14 +118,11 @@ export function PublishScreen({ records }) {
   };
 
   const handleUnpublish = async (id) => {
-    const apiKey = import.meta.env.VITE_API_KEY;
     try {
-      if (apiKey) {
-        await fetch(`${API_BASE}/record/${id}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${apiKey}` },
-        });
-      }
+      await fetch(`${API_BASE}/record/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
       await records.unpublish(id);
     } catch (e) {
       console.error(e);
@@ -259,12 +253,9 @@ export function PublishScreen({ records }) {
                       }}>{r.text || r.comment}</div>
                     )}
                   </div>
-                  {IS_OWNER && (
-                    <button
-                      onClick={() => handleUnpublish(r.id)}
-                      style={btnStyle}
-                    >非公開に戻す</button>
-                  )}
+                  <button onClick={() => handleUnpublish(r.id)} style={btnStyle}>
+                    非公開に戻す
+                  </button>
                 </div>
               ))}
             </div>
@@ -273,37 +264,35 @@ export function PublishScreen({ records }) {
       </div>
 
       {/* 公開ボタン */}
-      {IS_OWNER && (
-        <div style={{
-          padding: '12px 16px',
-          background: COLORS.card,
-          borderTop: `1px solid ${COLORS.border}`,
-          flexShrink: 0,
-        }}>
-          {publishing && progress && (
-            <div style={{ textAlign: 'center', color: COLORS.textLight, fontSize: 16, marginBottom: 8 }}>
-              {progress}
-            </div>
-          )}
-          <button
-            onClick={handlePublish}
-            disabled={selected.length === 0 || publishing}
-            style={{
-              width: '100%', padding: '16px', borderRadius: 8, minHeight: 56,
-              border: 'none', background: COLORS.primary,
-              color: '#fff', fontSize: 18, fontWeight: 600,
-              cursor: (selected.length === 0 || publishing) ? 'not-allowed' : 'pointer',
-              opacity: (selected.length === 0 || publishing) ? 0.5 : 1,
-            }}
-          >
-            {publishing
-              ? '公開中…'
-              : selected.length > 0
-                ? `選択した${selected.length}件をまとめて公開`
-                : '公開する記録を選択してください'}
-          </button>
-        </div>
-      )}
+      <div style={{
+        padding: '12px 16px',
+        background: COLORS.card,
+        borderTop: `1px solid ${COLORS.border}`,
+        flexShrink: 0,
+      }}>
+        {publishing && progress && (
+          <div style={{ textAlign: 'center', color: COLORS.textLight, fontSize: 16, marginBottom: 8 }}>
+            {progress}
+          </div>
+        )}
+        <button
+          onClick={handlePublish}
+          disabled={selected.length === 0 || publishing}
+          style={{
+            width: '100%', padding: '16px', borderRadius: 8, minHeight: 56,
+            border: 'none', background: COLORS.primary,
+            color: '#fff', fontSize: 18, fontWeight: 600,
+            cursor: (selected.length === 0 || publishing) ? 'not-allowed' : 'pointer',
+            opacity: (selected.length === 0 || publishing) ? 0.5 : 1,
+          }}
+        >
+          {publishing
+            ? '公開中…'
+            : selected.length > 0
+              ? `選択した${selected.length}件をまとめて公開`
+              : '公開する記録を選択してください'}
+        </button>
+      </div>
     </div>
   );
 }

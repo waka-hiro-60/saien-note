@@ -7,8 +7,6 @@ const COLORS = {
   border:    '#E5E0D8',
 };
 
-const IS_OWNER = import.meta.env.VITE_OWNER_MODE === 'true';
-
 const ALL_TABS = [
   { id: 'home',    label: 'ホーム',  icon: '🏠' },
   { id: 'tag',     label: 'タグ',    icon: '🏷️' },
@@ -17,8 +15,8 @@ const ALL_TABS = [
   { id: 'setting', label: '設定',    icon: '⚙️' },
 ];
 
-export function TabBar({ activeTab, onTabChange }) {
-  const TABS = ALL_TABS.filter((t) => !t.ownerOnly || IS_OWNER);
+export function TabBar({ activeTab, onTabChange, showPublish }) {
+  const TABS = ALL_TABS.filter((t) => !t.ownerOnly || showPublish);
 
   return (
     <div style={{

@@ -151,10 +151,120 @@ function BedVeggieMapSection({ tags }) {
 }
 
 // ─────────────────────────────────────────
+// 公開設定（APIキー）セクション
+// ─────────────────────────────────────────
+
+function ApiKeySection({ settings }) {
+  const [input,   setInput]   = useState('');
+  const [show,    setShow]    = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [msg,     setMsg]     = useState('');
+
+  const hasKey = !!settings.apiKey;
+
+  const handleSave = async () => {
+    if (!input.trim()) return;
+    setSaving(true);
+    try {
+      await settings.saveKey(input.trim());
+      setInput('');
+      setMsg('APIキーを保存しました。公開タブが表示されます。');
+      setTimeout(() => setMsg(''), 3000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClear = async () => {
+    if (!window.confirm('APIキーを削除します。公開タブが非表示になります。')) return;
+    await settings.clearKey();
+    setMsg('APIキーを削除しました。');
+    setTimeout(() => setMsg(''), 3000);
+  };
+
+  return (
+    <div style={{
+      background: COLORS.card, borderRadius: 12,
+      border: `1px solid ${COLORS.border}`, padding: 16,
+    }}>
+      <p style={{ fontSize: 16, color: COLORS.textLight, margin: '0 0 12px' }}>
+        APIキーを入力すると公開タブが表示されます。このアプリの管理者のみ設定してください。
+      </p>
+
+      {msg && (
+        <div style={{
+          padding: 10, borderRadius: 8, fontSize: 16, marginBottom: 12,
+          background: COLORS.primaryLight, color: COLORS.primary,
+        }}>{msg}</div>
+      )}
+
+      {hasKey ? (
+        /* 設定済み表示 */
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 20 }}>✅</span>
+            <span style={{ fontSize: 16, color: COLORS.primary, fontWeight: 600 }}>APIキー設定済み</span>
+          </div>
+          <button
+            onClick={handleClear}
+            style={{
+              padding: '8px 14px', borderRadius: 8, minHeight: 44,
+              border: `1px solid ${COLORS.red}`,
+              background: '#fff', color: COLORS.red,
+              fontSize: 16, cursor: 'pointer',
+            }}
+          >削除</button>
+        </div>
+      ) : (
+        /* 未設定：入力フォーム */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type={show ? 'text' : 'password'}
+              placeholder="APIキーを入力…"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              style={{
+                flex: 1, padding: '10px 12px', borderRadius: 8,
+                border: `1px solid ${COLORS.border}`, fontSize: 16,
+                background: COLORS.bg, color: COLORS.text, outline: 'none',
+                minHeight: 48,
+              }}
+            />
+            <button
+              onClick={() => setShow((v) => !v)}
+              style={{
+                padding: '10px 14px', borderRadius: 8, minHeight: 48,
+                border: `1px solid ${COLORS.border}`,
+                background: COLORS.card, color: COLORS.textLight,
+                fontSize: 18, cursor: 'pointer', flexShrink: 0,
+              }}
+            >{show ? '🙈' : '👁'}</button>
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={!input.trim() || saving}
+            style={{
+              width: '100%', padding: '14px', borderRadius: 8, minHeight: 56,
+              border: 'none', background: COLORS.primary,
+              color: '#fff', fontSize: 17, fontWeight: 600,
+              cursor: (!input.trim() || saving) ? 'not-allowed' : 'pointer',
+              opacity: (!input.trim() || saving) ? 0.5 : 1,
+            }}
+          >{saving ? '保存中…' : 'APIキーを保存'}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
 // SettingScreen
 // ─────────────────────────────────────────
 
-export function SettingScreen({ tags, records }) {
+export function SettingScreen({ tags, records, settings }) {
   const [newTagInputs, setNewTagInputs] = useState({});
   const [newCategory,  setNewCategory]  = useState('');
   const [backingUp,    setBackingUp]    = useState(false);
@@ -222,6 +332,18 @@ export function SettingScreen({ tags, records }) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+
+        {/* ─── 公開設定 ─── */}
+        <section style={{ marginBottom: 32 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, marginBottom: 12 }}>
+            🔑 公開設定
+          </div>
+          {settings.loading ? (
+            <div style={{ color: COLORS.textLight, fontSize: 16 }}>読み込み中…</div>
+          ) : (
+            <ApiKeySection settings={settings} />
+          )}
+        </section>
 
         {/* ─── 畝と野菜の対応設定 ─── */}
         <section style={{ marginBottom: 32 }}>
