@@ -18,17 +18,27 @@ export const DEFAULT_TAGS = {
   場所: ['畝1', '畝2', '畝3', '畝4', '畝5'],
 };
 
-// 内部圧縮処理
-async function _compress(file) {
+// FileをBlobに変換（IndexedDB互換・iOS Safari対応）
+function fileToBlob(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'));
+    reader.onerror = () => reject(new Error('ファイル読み込み失敗'));
+    reader.onload = (e) => resolve(new Blob([e.target.result], { type: file.type || 'image/jpeg' }));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// canvas圧縮を試みる
+function compressViaCanvas(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('ファイル読み込み失敗'));
     reader.onload = (e) => {
       const img = new Image();
-      img.onerror = () => reject(new Error('画像の読み込みに失敗しました'));
+      img.onerror = () => reject(new Error('画像読み込み失敗'));
       img.onload = () => {
         try {
-          const MAX = 1920;
+          const MAX = 1280;
           let { width, height } = img;
           if (width > MAX || height > MAX) {
             if (width >= height) { height = Math.round((height * MAX) / width); width = MAX; }
@@ -37,18 +47,18 @@ async function _compress(file) {
           const canvas = document.createElement('canvas');
           canvas.width = width; canvas.height = height;
           const ctx = canvas.getContext('2d');
-          if (!ctx) { reject(new Error('canvasの取得に失敗しました')); return; }
+          if (!ctx) { reject(new Error('canvas取得失敗')); return; }
           ctx.drawImage(img, 0, 0, width, height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-          if (!dataUrl || dataUrl === 'data:,') { reject(new Error('画像の変換に失敗しました')); return; }
+          if (!dataUrl || dataUrl === 'data:,') { reject(new Error('変換失敗')); return; }
           const parts = dataUrl.split(',');
-          if (parts.length < 2) { reject(new Error('画像データの解析に失敗しました')); return; }
+          if (parts.length < 2) { reject(new Error('解析失敗')); return; }
           const bin = atob(parts[1]);
           const arr = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
           resolve(new Blob([arr], { type: 'image/jpeg' }));
         } catch (err) {
-          reject(new Error('圧縮処理エラー'));
+          reject(new Error('圧縮失敗'));
         }
       };
       img.src = e.target.result;
@@ -57,13 +67,18 @@ async function _compress(file) {
   });
 }
 
-// 圧縮失敗時は元ファイルをそのまま返す（iOS Safari 対応フォールバック）
+// 圧縮失敗時はFile→Blobに変換して返す（圧縮なし・iOS Safari対応）
 export async function compressImage(file) {
   try {
-    return await _compress(file);
+    return await compressViaCanvas(file);
   } catch (err) {
-    console.warn('画像圧縮に失敗しました。元のファイルを使用します:', err);
-    return file;
+    console.warn('canvas圧縮失敗。Blob変換にフォールバック:', err);
+    try {
+      return await fileToBlob(file);
+    } catch (err2) {
+      console.warn('Blob変換も失敗:', err2);
+      throw new Error('画像の保存に失敗しました');
+    }
   }
 }
 
@@ -124,14 +139,10 @@ export async function updateRecord(id, updates) {
     if (imageFiles && imageFiles.length > 0) {
       const fileList = Array.from(imageFiles);
       images = [];
-      for (let i = 0; i < fileList.length; i++) {
-        images.push(await compressImage(fileList[i]));
-      }
+      for (let i = 0; i < fileList.length; i++) { images.push(await compressImage(fileList[i])); }
     } else if (addImageFiles && addImageFiles.length > 0) {
       const fileList = Array.from(addImageFiles);
-      for (let i = 0; i < fileList.length; i++) {
-        images.push(await compressImage(fileList[i]));
-      }
+      for (let i = 0; i < fileList.length; i++) { images.push(await compressImage(fileList[i])); }
     }
     base.images = images;
   }
