@@ -24,7 +24,7 @@ export function useRecords() {
       const data = await getAllRecords();
       setRecords(data);
     } catch (e) {
-      setError(e.message);
+      setError(e != null ? (e.message ?? String(e)) : '処理に失敗しました');
     } finally {
       setLoading(false);
     }
@@ -42,7 +42,7 @@ export function useRecords() {
       setRecords((prev) => [record, ...prev]);
       return record;
     } catch (e) {
-      setError(e.message);
+      setError(e != null ? (e.message ?? String(e)) : '処理に失敗しました');
       throw e;
     }
   }, []);
@@ -57,7 +57,7 @@ export function useRecords() {
       );
       return updated;
     } catch (e) {
-      setError(e.message);
+      setError(e != null ? (e.message ?? String(e)) : '処理に失敗しました');
       throw e;
     }
   }, []);
@@ -69,7 +69,7 @@ export function useRecords() {
       await deleteRecord(id);
       setRecords((prev) => prev.filter((r) => r.id !== id));
     } catch (e) {
-      setError(e.message);
+      setError(e != null ? (e.message ?? String(e)) : '処理に失敗しました');
       throw e;
     }
   }, []);
@@ -84,7 +84,7 @@ export function useRecords() {
       );
       return updated;
     } catch (e) {
-      setError(e.message);
+      setError(e != null ? (e.message ?? String(e)) : '処理に失敗しました');
       throw e;
     }
   }, []);
@@ -100,7 +100,7 @@ export function useRecords() {
         )
       );
     } catch (e) {
-      setError(e.message);
+      setError(e != null ? (e.message ?? String(e)) : '処理に失敗しました');
       throw e;
     }
   }, []);
@@ -115,7 +115,7 @@ export function useRecords() {
       );
       return updated;
     } catch (e) {
-      setError(e.message);
+      setError(e != null ? (e.message ?? String(e)) : '処理に失敗しました');
       throw e;
     }
   }, []);
