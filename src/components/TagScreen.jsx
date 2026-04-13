@@ -13,29 +13,6 @@ const COLORS = {
   tagText:      '#3A6B47',
 };
 
-// ─── サムネイル（Base64対応） ───
-function RecordThumb({ record, size = 80 }) {
-  const cat = record.category ?? 'veggie';
-  const src = cat === 'veggie'
-    ? (record.imageBase64 ?? null)
-    : (record.imageBase64s ?? [])[0] ?? null;
-
-  const icon = cat === 'diary' ? '📔' : cat === 'bed' ? '🌱' : '🥬';
-
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: 8, overflow: 'hidden',
-      background: '#E5E0D8', flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      {src
-        ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        : <span style={{ fontSize: 24 }}>{icon}</span>
-      }
-    </div>
-  );
-}
-
 // ─── 年比較カード（Base64対応） ───
 function CompareCard({ record }) {
   const cat = record.category ?? 'veggie';
@@ -55,19 +32,31 @@ function CompareCard({ record }) {
       boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
     }}>
       <div style={{ width: '100%', paddingTop: '75%', position: 'relative', background: '#E5E0D8' }}>
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
           {src
             ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : <span style={{ fontSize: 28 }}>{icon}</span>
           }
         </div>
         <span style={{ position: 'absolute', top: 4, left: 4, fontSize: 14, lineHeight: 1 }}>{icon}</span>
+        {(record.imageBase64s ?? []).length >= 2 && (
+          <div style={{
+            position: 'absolute', bottom: 4, right: 4,
+            background: 'rgba(0,0,0,0.55)', color: '#fff',
+            fontSize: 11, borderRadius: 4, padding: '1px 5px', lineHeight: 1.4,
+          }}>📷{record.imageBase64s.length}</div>
+        )}
       </div>
       <div style={{ padding: '8px 10px' }}>
-        <div style={{ fontSize: 14, color: COLORS.textLight, marginBottom: 4 }}>{record.date}</div>
+        <div style={{ fontSize: 14, color: COLORS.textLight, marginBottom: 4 }}>
+          {record.date}{record.time ? ` ${record.time}` : ''}
+        </div>
         {text && (
           <div style={{
-            fontSize: 16, color: COLORS.text, lineHeight: 1.4, marginBottom: 6,
+            fontSize: 15, color: COLORS.text, lineHeight: 1.4, marginBottom: 6,
             overflow: 'hidden', display: '-webkit-box',
             WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
           }}>{text}</div>
@@ -88,94 +77,49 @@ function CompareCard({ record }) {
   );
 }
 
-// ─── 時系列レコード行 ───
-function RecordItem({ record }) {
-  const text = record.text || record.comment || '';
-  return (
-    <div style={{
-      display: 'flex', gap: 10, alignItems: 'flex-start',
-      background: COLORS.card, borderRadius: 10,
-      padding: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
-    }}>
-      <RecordThumb record={record} size={72} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 16, color: COLORS.textLight }}>
-          {record.date}{record.time ? ` ${record.time}` : ''}
-        </div>
-        {text && (
-          <div style={{
-            fontSize: 18, color: COLORS.text, marginTop: 2,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{text}</div>
-        )}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-          {(record.tags ?? []).map((tag) => (
-            <span key={tag} style={{
-              fontSize: 16, padding: '3px 8px', borderRadius: 20,
-              background: COLORS.tagBg, color: COLORS.tagText,
-            }}>{tag}</span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── TagScreen ───
+// ─── TagScreen（年比較専用） ───
 export function TagScreen({ records, tags }) {
-  const [mode,        setMode]        = useState('timeline');
-  const [selectedTag, setSelectedTag] = useState('');   // ← 空文字で開始（auto-select廃止）
-  const [monthFilter, setMonthFilter] = useState('');
+  const [selectedTag, setSelectedTag] = useState('');
   const [leftYear,    setLeftYear]    = useState('');
   const [rightYear,   setRightYear]   = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
 
-  // タグで絞り込んだ記録（アーカイブ除外）
+  // 選択タグの記録（アーカイブ除外）
   const tagRecords = selectedTag
     ? records.records.filter((r) => !r.archived && (r.tags ?? []).includes(selectedTag))
     : [];
 
-  // 月フィルター用：存在する年月 'YYYY-MM' 一覧
-  const months = [...new Set(tagRecords.map((r) => r.date?.slice(0, 7)).filter(Boolean))].sort();
-
-  // 時系列（monthFilterは 'YYYY-MM' 形式）
-  const timelineRecords = monthFilter
-    ? tagRecords.filter((r) => r.date?.startsWith(monthFilter))
-    : tagRecords;
-
-  // 年比較：tagRecordsを年ごとにグループ化
+  // 年ごとにグループ化
   const byYear = tagRecords.reduce((acc, r) => {
     const year = r.date ? r.date.slice(0, 4) : '不明';
     if (!acc[year]) acc[year] = [];
     acc[year].push(r);
     return acc;
   }, {});
-  const years = Object.keys(byYear).sort();
 
-  // 選択タグが変わったとき年選択をリセット
+  // 選択可能な年：記録のある年 ＋ 現在年から過去4年を合わせてソート
+  const currentYear = new Date().getFullYear();
+  const recordYears = Object.keys(byYear);
+  const rangeYears  = Array.from({ length: 4 }, (_, i) => String(currentYear - i));
+  const selectableYears = [...new Set([...recordYears, ...rangeYears])].sort((a, b) => b.localeCompare(a));
+
+  // タグが変わったら年・月フィルターをリセット
   useEffect(() => {
-    if (years.length > 0) {
-      setLeftYear((prev) => years.includes(prev) ? prev : years[years.length - 1]);
-    } else {
-      setLeftYear('');
-    }
-    if (years.length > 1) {
-      setRightYear((prev) => years.includes(prev) ? prev : years[years.length - 2]);
-    } else {
-      setRightYear('');
-    }
-  }, [years.join(',')]); // eslint-disable-line
+    setLeftYear(selectableYears[0] ?? '');
+    setRightYear(selectableYears[1] ?? '');
+    setMonthFilter('');
+  }, [selectedTag]); // eslint-disable-line
 
-  // 年比較の月フィルター（MM形式）
+  // 月フィルター用：全年共通の月（MM）一覧
   const compareMonths = [...new Set(tagRecords.map((r) => r.date?.slice(5, 7)).filter(Boolean))].sort();
 
-  const compareFilter = (recs) => {
+  const filterByMonth = (recs) => {
     if (!monthFilter) return recs;
-    const mm = monthFilter.length === 7 ? monthFilter.slice(5, 7) : monthFilter;
-    return recs.filter((r) => r.date?.slice(5, 7) === mm);
+    return recs.filter((r) => r.date?.slice(5, 7) === monthFilter);
   };
 
-  const leftRecords  = compareFilter(byYear[leftYear]  ?? []);
-  const rightRecords = compareFilter(byYear[rightYear] ?? []);
+  const leftRecords  = filterByMonth(byYear[leftYear]  ?? []);
+  const rightRecords = filterByMonth(byYear[rightYear] ?? []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -186,19 +130,19 @@ export function TagScreen({ records, tags }) {
         borderBottom: `1px solid ${COLORS.border}`,
         flexShrink: 0,
       }}>
-        <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.text }}>タグで見る</span>
+        <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.text }}>年別比較</span>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
 
-        {/* タグ選択 */}
+        {/* Step1: タグ選択 */}
         <div style={{
-          padding: '10px 16px',
+          padding: '12px 16px',
           background: COLORS.card,
           borderBottom: `1px solid ${COLORS.border}`,
         }}>
-          <div style={{ fontSize: 16, color: COLORS.textLight, marginBottom: 8 }}>
-            タグを選択（1つ）
+          <div style={{ fontSize: 15, color: COLORS.textLight, marginBottom: 8, fontWeight: 600 }}>
+            ① タグを選ぶ
           </div>
           {tags.loading ? (
             <div style={{ color: COLORS.textLight, fontSize: 16 }}>読み込み中…</div>
@@ -206,18 +150,14 @@ export function TagScreen({ records, tags }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {Object.entries(tags.tags).map(([cat, tagList]) => (
                 <div key={cat}>
-                  <div style={{ fontSize: 14, color: COLORS.textLight, marginBottom: 4 }}>{cat}</div>
+                  <div style={{ fontSize: 13, color: COLORS.textLight, marginBottom: 4 }}>{cat}</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {tagList.map((tag) => {
                       const active = selectedTag === tag;
                       return (
                         <button
                           key={tag}
-                          onClick={() => {
-                            // 同じタグをタップで選択解除
-                            setSelectedTag((prev) => prev === tag ? '' : tag);
-                            setMonthFilter('');
-                          }}
+                          onClick={() => setSelectedTag((prev) => prev === tag ? '' : tag)}
                           style={{
                             padding: '6px 12px', borderRadius: 20, minHeight: 44,
                             border: `2px solid ${active ? COLORS.primary : COLORS.border}`,
@@ -236,148 +176,137 @@ export function TagScreen({ records, tags }) {
           )}
         </div>
 
-        {/* モード切替（sticky） */}
-        {selectedTag && (
-          <div style={{
-            display: 'flex', padding: '8px 16px', gap: 8,
-            background: COLORS.card, borderBottom: `1px solid ${COLORS.border}`,
-            position: 'sticky', top: 0, zIndex: 10,
-          }}>
-            {(['timeline', 'compare']).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                style={{
-                  flex: 1, padding: '10px', borderRadius: 8, minHeight: 48,
-                  border: `1px solid ${mode === m ? COLORS.primary : COLORS.border}`,
-                  background: mode === m ? COLORS.primaryLight : COLORS.card,
-                  color: mode === m ? COLORS.primary : COLORS.textLight,
-                  fontSize: 16, cursor: 'pointer', fontWeight: mode === m ? 700 : 400,
-                }}
-              >{m === 'timeline' ? '時系列' : '年比較'}</button>
-            ))}
+        {/* タグ未選択 */}
+        {!selectedTag && (
+          <div style={{ textAlign: 'center', color: COLORS.textLight, padding: 48, fontSize: 16 }}>
+            タグを選ぶと年別に比較できます
           </div>
         )}
 
-        {/* コンテンツ */}
-        <div style={{ padding: 12 }}>
-          {!selectedTag ? (
-            <div style={{ textAlign: 'center', color: COLORS.textLight, padding: 40, fontSize: 16 }}>
-              上のタグをタップして記録を見る
+        {/* タグ選択済み */}
+        {selectedTag && (
+          <div style={{ padding: 12 }}>
+
+            {/* Step2: 年を選ぶ */}
+            <div style={{ fontSize: 15, color: COLORS.textLight, marginBottom: 8, fontWeight: 600 }}>
+              ② 比べる年を選ぶ
             </div>
-          ) : mode === 'timeline' ? (
-            <>
-              {months.length > 1 && (
-                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, scrollbarWidth: 'none' }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+              <select
+                value={leftYear}
+                onChange={(e) => setLeftYear(e.target.value)}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: 8, minHeight: 48,
+                  border: `1px solid ${COLORS.border}`, fontSize: 16,
+                  background: COLORS.card, color: COLORS.text,
+                }}
+              >
+                <option value="">年を選択</option>
+                {selectableYears.map((y) => (
+                  <option key={y} value={y}>
+                    {y}年{byYear[y] ? ` (${byYear[y].length}件)` : ' (記録なし)'}
+                  </option>
+                ))}
+              </select>
+              <div style={{ fontSize: 16, color: COLORS.textLight, flexShrink: 0 }}>vs</div>
+              <select
+                value={rightYear}
+                onChange={(e) => setRightYear(e.target.value)}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: 8, minHeight: 48,
+                  border: `1px solid ${COLORS.border}`, fontSize: 16,
+                  background: COLORS.card, color: COLORS.text,
+                }}
+              >
+                <option value="">年を選択</option>
+                {selectableYears.map((y) => (
+                  <option key={y} value={y}>
+                    {y}年{byYear[y] ? ` (${byYear[y].length}件)` : ' (記録なし)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 月フィルター（記録がある月だけ表示） */}
+            {compareMonths.length > 1 && (
+              <>
+                <div style={{ fontSize: 15, color: COLORS.textLight, marginBottom: 8, fontWeight: 600 }}>
+                  月で絞り込む（任意）
+                </div>
+                <div style={{
+                  display: 'flex', gap: 6, overflowX: 'auto',
+                  paddingBottom: 10, scrollbarWidth: 'none', marginBottom: 12,
+                }}>
                   <button
                     onClick={() => setMonthFilter('')}
                     style={{
-                      flexShrink: 0, padding: '6px 12px', borderRadius: 20, fontSize: 16, minHeight: 44,
-                      border: `1px solid ${!monthFilter ? COLORS.primary : COLORS.border}`,
+                      flexShrink: 0, padding: '6px 14px', borderRadius: 20, minHeight: 44,
+                      border: `2px solid ${!monthFilter ? COLORS.primary : COLORS.border}`,
                       background: !monthFilter ? COLORS.primaryLight : COLORS.card,
-                      color: !monthFilter ? COLORS.tagText : COLORS.textLight, cursor: 'pointer',
+                      color: !monthFilter ? COLORS.tagText : COLORS.textLight,
+                      fontSize: 16, cursor: 'pointer', fontWeight: !monthFilter ? 700 : 400,
                     }}
                   >すべて</button>
-                  {months.map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setMonthFilter(m)}
-                      style={{
-                        flexShrink: 0, padding: '6px 12px', borderRadius: 20, fontSize: 16, minHeight: 44,
-                        border: `1px solid ${monthFilter === m ? COLORS.primary : COLORS.border}`,
-                        background: monthFilter === m ? COLORS.primaryLight : COLORS.card,
-                        color: monthFilter === m ? COLORS.tagText : COLORS.textLight, cursor: 'pointer',
-                      }}
-                    >{m}</button>
-                  ))}
-                </div>
-              )}
-              {timelineRecords.length === 0 ? (
-                <div style={{ textAlign: 'center', color: COLORS.textLight, padding: 40, fontSize: 16 }}>
-                  記録がありません
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {timelineRecords.map((r) => <RecordItem key={r.id} record={r} />)}
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              {/* 年比較モード */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                <select value={leftYear} onChange={(e) => setLeftYear(e.target.value)}
-                  style={{
-                    flex: 1, padding: '10px', borderRadius: 8, minHeight: 48,
-                    border: `1px solid ${COLORS.border}`, fontSize: 16,
-                    background: COLORS.card, color: COLORS.text,
-                  }}>
-                  <option value="">年を選択</option>
-                  {years.map((y) => <option key={y} value={y}>{y}年</option>)}
-                </select>
-                <select value={rightYear} onChange={(e) => setRightYear(e.target.value)}
-                  style={{
-                    flex: 1, padding: '10px', borderRadius: 8, minHeight: 48,
-                    border: `1px solid ${COLORS.border}`, fontSize: 16,
-                    background: COLORS.card, color: COLORS.text,
-                  }}>
-                  <option value="">年を選択</option>
-                  {years.map((y) => <option key={y} value={y}>{y}年</option>)}
-                </select>
-              </div>
-
-              {compareMonths.length > 0 && (
-                <div style={{
-                  display: 'flex', gap: 8, overflowX: 'auto',
-                  paddingBottom: 10, scrollbarWidth: 'none', marginBottom: 4,
-                }}>
-                  <button onClick={() => setMonthFilter('')} style={{
-                    flexShrink: 0, padding: '0 18px', height: 56, borderRadius: 28,
-                    fontSize: 16, cursor: 'pointer',
-                    border: `2px solid ${!monthFilter ? COLORS.primary : COLORS.border}`,
-                    background: !monthFilter ? COLORS.primaryLight : COLORS.card,
-                    color: !monthFilter ? COLORS.tagText : COLORS.textLight,
-                    fontWeight: !monthFilter ? 700 : 400, whiteSpace: 'nowrap',
-                  }}>すべて</button>
                   {compareMonths.map((mm) => {
                     const active = monthFilter === mm;
                     return (
-                      <button key={mm} onClick={() => setMonthFilter(active ? '' : mm)} style={{
-                        flexShrink: 0, padding: '0 16px', height: 56, borderRadius: 28,
-                        fontSize: 16, cursor: 'pointer',
-                        border: `2px solid ${active ? COLORS.primary : COLORS.border}`,
-                        background: active ? COLORS.primaryLight : COLORS.card,
-                        color: active ? COLORS.tagText : COLORS.textLight,
-                        fontWeight: active ? 700 : 400, whiteSpace: 'nowrap',
-                      }}>{Number(mm)}月</button>
+                      <button
+                        key={mm}
+                        onClick={() => setMonthFilter(active ? '' : mm)}
+                        style={{
+                          flexShrink: 0, padding: '6px 14px', borderRadius: 20, minHeight: 44,
+                          border: `2px solid ${active ? COLORS.primary : COLORS.border}`,
+                          background: active ? COLORS.primaryLight : COLORS.card,
+                          color: active ? COLORS.tagText : COLORS.textLight,
+                          fontSize: 16, cursor: 'pointer', fontWeight: active ? 700 : 400,
+                        }}
+                      >{Number(mm)}月</button>
                     );
                   })}
                 </div>
-              )}
+              </>
+            )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.primary, marginBottom: 8, textAlign: 'center' }}>
-                    {leftYear ? `${leftYear}年` : '—'}
-                  </div>
-                  {leftRecords.length === 0
-                    ? <div style={{ fontSize: 16, color: COLORS.textLight, textAlign: 'center' }}>記録なし</div>
-                    : leftRecords.map((r) => <CompareCard key={r.id} record={r} />)
-                  }
+            {/* 比較グリッド */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {/* 左列 */}
+              <div>
+                <div style={{
+                  fontSize: 16, fontWeight: 700, color: COLORS.primary,
+                  marginBottom: 8, textAlign: 'center',
+                  padding: '6px 0', borderBottom: `2px solid ${COLORS.primary}`,
+                }}>
+                  {leftYear ? `${leftYear}年` : '—'}
                 </div>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.primary, marginBottom: 8, textAlign: 'center' }}>
-                    {rightYear ? `${rightYear}年` : '—'}
+                {!leftYear ? null : leftRecords.length === 0 ? (
+                  <div style={{ fontSize: 15, color: COLORS.textLight, textAlign: 'center', paddingTop: 20 }}>
+                    記録なし
                   </div>
-                  {rightRecords.length === 0
-                    ? <div style={{ fontSize: 16, color: COLORS.textLight, textAlign: 'center' }}>記録なし</div>
-                    : rightRecords.map((r) => <CompareCard key={r.id} record={r} />)
-                  }
-                </div>
+                ) : (
+                  leftRecords.map((r) => <CompareCard key={r.id} record={r} />)
+                )}
               </div>
-            </>
-          )}
-        </div>
+              {/* 右列 */}
+              <div>
+                <div style={{
+                  fontSize: 16, fontWeight: 700, color: COLORS.primary,
+                  marginBottom: 8, textAlign: 'center',
+                  padding: '6px 0', borderBottom: `2px solid ${COLORS.primary}`,
+                }}>
+                  {rightYear ? `${rightYear}年` : '—'}
+                </div>
+                {!rightYear ? null : rightRecords.length === 0 ? (
+                  <div style={{ fontSize: 15, color: COLORS.textLight, textAlign: 'center', paddingTop: 20 }}>
+                    記録なし
+                  </div>
+                ) : (
+                  rightRecords.map((r) => <CompareCard key={r.id} record={r} />)
+                )}
+              </div>
+            </div>
+
+          </div>
+        )}
       </div>
     </div>
   );
