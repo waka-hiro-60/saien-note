@@ -24,28 +24,20 @@ function errMsg(e) {
   return e.message ?? e.name ?? String(e);
 }
 
-function fileToBlob(file) {
+// 画像をBase64文字列に変換（iOS SafariのIndexedDB Blob保存問題を回避）
+export async function compressImage(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('fileToBlob:読み込み失敗'));
+    reader.onerror = () => reject(new Error('FileReader失敗'));
     reader.onload = (e) => {
-      try {
-        resolve(new Blob([e.target.result], { type: file.type || 'image/jpeg' }));
-      } catch (err) {
-        reject(new Error('fileToBlob:Blob生成失敗:' + errMsg(err)));
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  });
-}
+      const dataUrl = e.target.result; // "data:image/jpeg;base64,..."
+      if (!dataUrl) { reject(new Error('dataUrl取得失敗')); return; }
 
-function compressViaCanvas(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('canvas:FileReader失敗'));
-    reader.onload = (e) => {
       const img = new Image();
-      img.onerror = () => reject(new Error('canvas:Image読み込み失敗'));
+      img.onerror = () => {
+        // 圧縮失敗時はそのままBase64で返す
+        resolve(dataUrl);
+      };
       img.onload = () => {
         try {
           const MAX = 1280;
@@ -57,37 +49,47 @@ function compressViaCanvas(file) {
           const canvas = document.createElement('canvas');
           canvas.width = width; canvas.height = height;
           const ctx = canvas.getContext('2d');
-          if (!ctx) { reject(new Error('canvas:getContext失敗')); return; }
+          if (!ctx) { resolve(dataUrl); return; } // canvas失敗時はそのまま返す
           ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-          if (!dataUrl || dataUrl === 'data:,') { reject(new Error('canvas:toDataURL失敗')); return; }
-          const parts = dataUrl.split(',');
-          if (parts.length < 2) { reject(new Error('canvas:split失敗')); return; }
-          const bin = atob(parts[1]);
-          const arr = new Uint8Array(bin.length);
-          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-          resolve(new Blob([arr], { type: 'image/jpeg' }));
+          const compressed = canvas.toDataURL('image/jpeg', 0.8);
+          resolve(compressed && compressed !== 'data:,' ? compressed : dataUrl);
         } catch (err) {
-          reject(new Error('canvas:処理失敗:' + errMsg(err)));
+          resolve(dataUrl); // 圧縮失敗時はそのまま返す
         }
       };
-      img.src = e.target.result;
+      img.src = dataUrl;
     };
     reader.readAsDataURL(file);
   });
 }
 
-export async function compressImage(file) {
+// Base64文字列 → Blob（表示用）
+export function base64ToBlob(dataUrl) {
+  if (!dataUrl) return null;
   try {
-    return await compressViaCanvas(file);
-  } catch (err) {
-    console.warn('canvas圧縮失敗(' + errMsg(err) + ')→Blobフォールバック');
-    try {
-      return await fileToBlob(file);
-    } catch (err2) {
-      throw new Error('画像変換失敗:canvas=' + errMsg(err) + ',blob=' + errMsg(err2));
-    }
+    const parts = dataUrl.split(',');
+    if (parts.length < 2) return null;
+    const mime = parts[0].match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+    const bin  = atob(parts[1]);
+    const arr  = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  } catch (e) {
+    return null;
   }
+}
+
+// Base64文字列からBlobURLを生成（画像表示用）
+export function createImageUrl(imageData) {
+  if (!imageData) return null;
+  if (typeof imageData === 'string') {
+    // Base64文字列の場合はそのまま返す
+    return imageData;
+  }
+  if (imageData instanceof Blob) {
+    return URL.createObjectURL(imageData);
+  }
+  return null;
 }
 
 export async function getAllRecords() {
@@ -116,7 +118,8 @@ export async function addRecord(data) {
       try { images.push(await compressImage(fileList[i])); }
       catch (e) { throw new Error('diary画像' + (i+1) + '枚目失敗:' + errMsg(e)); }
     }
-    record = { id, category: 'diary', date: data.date ?? '', time: data.time ?? '', images, text: data.text ?? '', archived: false, published: false, createdAt: now, updatedAt: now };
+    // Base64文字列として保存（BlobではなくString）
+    record = { id, category: 'diary', date: data.date ?? '', time: data.time ?? '', imageBase64s: images, text: data.text ?? '', archived: false, published: false, createdAt: now, updatedAt: now };
   } else if (category === 'bed') {
     const images = [];
     const fileList = Array.from(data.imageFiles ?? []);
@@ -124,14 +127,14 @@ export async function addRecord(data) {
       try { images.push(await compressImage(fileList[i])); }
       catch (e) { throw new Error('bed画像' + (i+1) + '枚目失敗:' + errMsg(e)); }
     }
-    record = { id, category: 'bed', date: data.date ?? '', time: data.time ?? '', images, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
+    record = { id, category: 'bed', date: data.date ?? '', time: data.time ?? '', imageBase64s: images, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
   } else {
-    let imageBlob = null;
+    let imageBase64 = null;
     if (data.imageFile) {
-      try { imageBlob = await compressImage(data.imageFile); }
+      try { imageBase64 = await compressImage(data.imageFile); }
       catch (e) { throw new Error('veggie画像失敗:' + errMsg(e)); }
     }
-    record = { id, category: 'veggie', date: data.date ?? '', time: data.time ?? '', imageBlob, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
+    record = { id, category: 'veggie', date: data.date ?? '', time: data.time ?? '', imageBase64, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
   }
 
   try {
@@ -148,10 +151,11 @@ export async function updateRecord(id, updates) {
   const category = existing.category ?? 'veggie';
   const { imageFile, imageFiles, addImageFiles, images: newImagesArray, ...restUpdates } = updates;
   const base = { ...existing, ...restUpdates, updatedAt: Date.now() };
+
   if (category === 'veggie') {
-    if (imageFile) { base.imageBlob = await compressImage(imageFile); }
+    if (imageFile) { base.imageBase64 = await compressImage(imageFile); }
   } else {
-    let images = existing.images ?? [];
+    let images = existing.imageBase64s ?? [];
     if (newImagesArray !== undefined) { images = newImagesArray; }
     if (imageFiles && imageFiles.length > 0) {
       const fileList = Array.from(imageFiles);
@@ -161,7 +165,7 @@ export async function updateRecord(id, updates) {
       const fileList = Array.from(addImageFiles);
       for (let i = 0; i < fileList.length; i++) { images.push(await compressImage(fileList[i])); }
     }
-    base.images = images;
+    base.imageBase64s = images;
   }
   await set(id, base, recordsStore);
   return base;
