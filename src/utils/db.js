@@ -55,17 +55,49 @@ export async function compressImage(file) {
       canvas.height = height;
 
       const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        reject(new Error('canvas.getContext に失敗しました'));
+        return;
+      }
       ctx.drawImage(img, 0, 0, width, height);
 
-      canvas.toBlob(
-        (blob) => {
-          URL.revokeObjectURL(url);
-          if (blob) resolve(blob);
-          else reject(new Error('画像の圧縮に失敗しました'));
-        },
-        'image/jpeg',
-        0.8,
-      );
+      // toBlob を試みる（iOS Safari では null になることがある）
+      try {
+        canvas.toBlob(
+          (blob) => {
+            URL.revokeObjectURL(url);
+            if (blob) {
+              resolve(blob);
+            } else {
+              // フォールバック: toDataURL → Blob変換
+              try {
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                const bin = atob(dataUrl.split(',')[1]);
+                const arr = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                resolve(new Blob([arr], { type: 'image/jpeg' }));
+              } catch (e2) {
+                reject(new Error('画像の圧縮に失敗しました'));
+              }
+            }
+          },
+          'image/jpeg',
+          0.8,
+        );
+      } catch {
+        // toBlob自体が例外を投げた場合もフォールバック
+        URL.revokeObjectURL(url);
+        try {
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          const bin = atob(dataUrl.split(',')[1]);
+          const arr = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          resolve(new Blob([arr], { type: 'image/jpeg' }));
+        } catch (e2) {
+          reject(new Error('画像の圧縮に失敗しました'));
+        }
+      }
     };
 
     img.onerror = () => {
