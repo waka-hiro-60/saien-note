@@ -18,8 +18,8 @@ export const DEFAULT_TAGS = {
   場所: ['畝1', '畝2', '畝3', '畝4', '畝5'],
 };
 
-// FileReader経由で読み込み toDataURL で変換（iOS Safari対応）
-export async function compressImage(file) {
+// 内部圧縮処理
+async function _compress(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'));
@@ -48,13 +48,23 @@ export async function compressImage(file) {
           for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
           resolve(new Blob([arr], { type: 'image/jpeg' }));
         } catch (err) {
-          reject(new Error('画像の圧縮に失敗しました: ' + (err != null ? (err.message ?? String(err)) : 'unknown')));
+          reject(new Error('圧縮処理エラー'));
         }
       };
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
   });
+}
+
+// 圧縮失敗時は元ファイルをそのまま返す（iOS Safari 対応フォールバック）
+export async function compressImage(file) {
+  try {
+    return await _compress(file);
+  } catch (err) {
+    console.warn('画像圧縮に失敗しました。元のファイルを使用します:', err);
+    return file;
+  }
 }
 
 export async function getAllRecords() {
@@ -80,16 +90,14 @@ export async function addRecord(data) {
     const images = [];
     const fileList = Array.from(data.imageFiles ?? []);
     for (let i = 0; i < fileList.length; i++) {
-      try { images.push(await compressImage(fileList[i])); }
-      catch (e) { throw new Error('画像 ' + (i+1) + ' 枚目の圧縮に失敗しました: ' + (e != null ? (e.message ?? String(e)) : 'unknown')); }
+      images.push(await compressImage(fileList[i]));
     }
     record = { id, category: 'diary', date: data.date ?? '', time: data.time ?? '', images, text: data.text ?? '', archived: false, published: false, createdAt: now, updatedAt: now };
   } else if (category === 'bed') {
     const images = [];
     const fileList = Array.from(data.imageFiles ?? []);
     for (let i = 0; i < fileList.length; i++) {
-      try { images.push(await compressImage(fileList[i])); }
-      catch (e) { throw new Error('画像 ' + (i+1) + ' 枚目の圧縮に失敗しました: ' + (e != null ? (e.message ?? String(e)) : 'unknown')); }
+      images.push(await compressImage(fileList[i]));
     }
     record = { id, category: 'bed', date: data.date ?? '', time: data.time ?? '', images, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
   } else {
@@ -117,14 +125,12 @@ export async function updateRecord(id, updates) {
       const fileList = Array.from(imageFiles);
       images = [];
       for (let i = 0; i < fileList.length; i++) {
-        try { images.push(await compressImage(fileList[i])); }
-        catch (e) { throw new Error('画像 ' + (i+1) + ' 枚目の圧縮に失敗しました: ' + (e != null ? (e.message ?? String(e)) : 'unknown')); }
+        images.push(await compressImage(fileList[i]));
       }
     } else if (addImageFiles && addImageFiles.length > 0) {
       const fileList = Array.from(addImageFiles);
       for (let i = 0; i < fileList.length; i++) {
-        try { images.push(await compressImage(fileList[i])); }
-        catch (e) { throw new Error('追加画像 ' + (i+1) + ' 枚目の圧縮に失敗しました: ' + (e != null ? (e.message ?? String(e)) : 'unknown')); }
+        images.push(await compressImage(fileList[i]));
       }
     }
     base.images = images;

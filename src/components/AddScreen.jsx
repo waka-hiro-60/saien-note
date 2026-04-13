@@ -342,7 +342,7 @@ export function AddScreen({ records, tags, onDone }) {
       onDone();
     } catch (e) {
       console.error('[handleSave] 保存エラー:', e);
-      setError(e.message);
+      setError(e != null ? (e.message ?? String(e)) : '保存に失敗しました');
     } finally {
       setSaving(false);
     }
