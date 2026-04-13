@@ -19,10 +19,10 @@ const COLORS = {
 };
 
 // ─────────────────────────────────────────
-// ユーティリティ
+// ユーティリティ（旧Blob形式の後方互換用）
 // ─────────────────────────────────────────
 
-/** Blob / File → base64 データURL */
+/** Blob / File → base64 データURL（旧フォーマットの閲覧用） */
 function blobToBase64(blob) {
   return new Promise((resolve) => {
     if (!blob) { resolve(null); return; }
@@ -33,58 +33,14 @@ function blobToBase64(blob) {
   });
 }
 
-/** base64 データURL → Blob */
-function base64ToBlob(base64) {
-  const [header, data] = base64.split(',');
-  const mime   = header.match(/:(.*?);/)[1];
-  const binary = atob(data);
-  const array  = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
-  return new Blob([array], { type: mime });
-}
-
-// ─────────────────────────────────────────
-// BlobImage（閲覧モード専用）
-// ─────────────────────────────────────────
-
-function BlobImage({ blob, style = {}, placeholder = '🌿' }) {
-  const [url, setUrl] = useState(null);
-
-  useEffect(() => {
-    if (!blob) { setUrl(null); return; }
-    const u = URL.createObjectURL(blob);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [blob]);
-
-  if (!url) {
-    return (
-      <div style={{
-        width: '100%', height: '100%',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: '#E5E0D8', color: COLORS.textLight, fontSize: 32,
-        ...style,
-      }}>{placeholder}</div>
-    );
-  }
-  return (
-    <img
-      src={url}
-      alt=""
-      style={{ width: '100%', height: '100%', objectFit: 'cover', ...style }}
-    />
-  );
-}
-
 // ─────────────────────────────────────────
 // ImageGrid
-// 閲覧モード: blobs（BlobImage使用）
-// 編集モード: srcs（base64文字列配列、<img src>直接使用）
+// srcs: Base64文字列配列（常にsrcsモードで使用）
+// editable: trueのとき削除ボタンを表示
 // ─────────────────────────────────────────
 
-function ImageGrid({ blobs, srcs, editable, onRemove }) {
-  const isSrcMode = Array.isArray(srcs);
-  const count     = isSrcMode ? srcs.length : (blobs?.length ?? 0);
+function ImageGrid({ srcs, editable, onRemove }) {
+  const count = (srcs ?? []).length;
 
   if (count === 0) {
     return (
@@ -102,18 +58,11 @@ function ImageGrid({ blobs, srcs, editable, onRemove }) {
     return (
       <div style={{ position: 'relative' }}>
         <div style={{ height: 260, background: '#000', position: 'relative' }}>
-          {isSrcMode ? (
-            <img
-              src={srcs[0]}
-              alt=""
-              style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'absolute', inset: 0 }}
-            />
-          ) : (
-            <BlobImage
-              blob={blobs[0]}
-              style={{ objectFit: 'contain', position: 'absolute', inset: 0 }}
-            />
-          )}
+          <img
+            src={srcs[0]}
+            alt=""
+            style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'absolute', inset: 0 }}
+          />
         </div>
         {editable && (
           <button
@@ -138,18 +87,14 @@ function ImageGrid({ blobs, srcs, editable, onRemove }) {
       gap: 4, padding: 4,
       background: '#111',
     }}>
-      {Array.from({ length: count }).map((_, i) => (
+      {srcs.map((src, i) => (
         <div key={i} style={{ position: 'relative', paddingTop: '100%' }}>
           <div style={{ position: 'absolute', inset: 0, borderRadius: 4, overflow: 'hidden' }}>
-            {isSrcMode ? (
-              <img
-                src={srcs[i]}
-                alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            ) : (
-              <BlobImage blob={blobs[i]} />
-            )}
+            <img
+              src={src}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
           </div>
           {editable && (
             <button
@@ -189,49 +134,41 @@ export function DetailScreen({ record, onClose, records, tags }) {
 
   const cameraRef = useRef();
   const albumRef  = useRef();
-  const editInitRef = useRef(false); // 編集モード初期化フラグ
+  const editInitRef = useRef(false);
 
-  // ─── 写真管理（base64一元管理） ───────────────────────
+  // ─── 写真管理（Base64一元管理） ───────────────────────
   //
-  // 【veggie】 単一画像
-  //   viewImgBase64 : 閲覧モード表示用（record.imageBlob → base64）
-  //   editImgBase64 : 編集モード・新規選択ファイルのプレビュー用
-  //   editImageFile : 保存時に渡すファイル（veggie は File をそのまま db に渡す）
+  // 【veggie】単一画像
+  //   viewImgBase64 : 閲覧モード用（record.imageBase64、旧Blobは変換して表示）
+  //   editImgBase64 : 編集モードで新規選択した画像（compressImageで即時Base64化）
+  //   表示: editMode ? (editImgBase64 || viewImgBase64) : viewImgBase64
   //
-  // 【bed / diary】 複数画像
-  //   allImageBase64[] : 編集中の全写真を base64 で一元管理
-  //     - 編集モード開始時 : 既存 Blob すべてを base64 に変換して初期化
-  //     - 写真追加時       : FileReader で base64 化して末尾に追加
-  //     - 写真削除時       : 該当インデックスを除外
-  //     - 保存時           : base64 → Blob に戻して records.update に渡す
-  //   表示は <img src={base64}> のみ。BlobURL は一切使わない。
+  // 【bed / diary】複数画像
+  //   allImageBase64[] : 編集中の全写真をBase64で一元管理
+  //     - 編集モード開始時: record.imageBase64sをそのまま初期化
+  //     - 写真追加時: compressImageでBase64化して追加
+  //     - 写真削除時: 該当インデックスを除外
+  //     - 保存時: allImageBase64をそのまま渡す
   // ─────────────────────────────────────────────────────
 
-  // veggie: 閲覧モード表示
+  // veggie: 閲覧モード表示（旧Blob形式も後方互換で対応）
   const [viewImgBase64, setViewImgBase64] = useState(null);
   useEffect(() => {
     if (category !== 'veggie') { setViewImgBase64(null); return; }
     if (record.imageBase64) { setViewImgBase64(record.imageBase64); return; }
-    if (record.imageBlob) { blobToBase64(record.imageBlob).then(setViewImgBase64); return; }
+    if (record.imageBlob)   { blobToBase64(record.imageBlob).then(setViewImgBase64); return; }
     setViewImgBase64(null);
   }, [record.imageBase64, record.imageBlob, category]);
 
-  // veggie: 編集モードで新しいファイルを選択したときのプレビュー
-  const [editImageFile,  setEditImageFile]  = useState(null);
-  const [editImgBase64,  setEditImgBase64]  = useState(null);
-  useEffect(() => {
-    if (!editImageFile) { setEditImgBase64(null); return; }
-    blobToBase64(editImageFile).then(setEditImgBase64);
-  }, [editImageFile]);
+  // veggie: 編集モードで新規選択した画像（Base64で管理）
+  const [editImgBase64, setEditImgBase64] = useState(null);
 
-  // bed/diary: 編集モードの全写真（base64一元管理）
+  // bed/diary: 編集モードの全写真（Base64一元管理）
   const [allImageBase64, setAllImageBase64] = useState([]);
 
-  // 編集モード開始時に既存 Blob → base64 一括変換
+  // 編集モード開始時に既存画像を初期化
   useEffect(() => {
     if (!editMode || category === 'veggie') return;
-
-    // editModeがtrueになった瞬間だけ初期化（それ以外は無視）
     if (editInitRef.current) return;
     editInitRef.current = true;
 
@@ -250,10 +187,10 @@ export function DetailScreen({ record, onClose, records, tags }) {
     return () => { cancelled = true; };
   }, [editMode, category]);
 
-  // 写真追加（bed/diary）: compressImageでBase64化してから追記
+  // 写真追加（bed/diary）
+  // ⚠️ input.value='' は処理後にクリアする（iOS Safari対応）
   const handleAddImages = async (files, inputRef) => {
     const arr = Array.from(files);
-    if (inputRef?.current) inputRef.current.value = '';
     for (const file of arr) {
       try {
         const base64 = await compressImage(file);
@@ -262,6 +199,7 @@ export function DetailScreen({ record, onClose, records, tags }) {
         console.warn('写真追加失敗:', e);
       }
     }
+    if (inputRef?.current) inputRef.current.value = '';
   };
 
   // 写真削除（bed/diary）
@@ -316,10 +254,11 @@ export function DetailScreen({ record, onClose, records, tags }) {
       if (category === 'veggie') {
         updates.comment = editComment;
         updates.tags    = editTags;
-        if (editImageFile) updates.imageFile = editImageFile;
+        // 新しい画像が選択された場合のみ上書き（未変更時はundefinedのままにしてdb.jsで既存保持）
+        if (editImgBase64) updates.imageBase64 = editImgBase64;
       } else if (category === 'bed') {
-        updates.comment = editComment;
-        updates.tags    = editTags;
+        updates.comment      = editComment;
+        updates.tags         = editTags;
         updates.imageBase64s = allImageBase64;
       } else {
         // diary
@@ -330,7 +269,7 @@ export function DetailScreen({ record, onClose, records, tags }) {
       await records.update(record.id, updates);
       editInitRef.current = false;
       setEditMode(false);
-      setEditImageFile(null);
+      setEditImgBase64(null);
       setAllImageBase64([]);
       onClose();
     } catch (e) {
@@ -344,7 +283,7 @@ export function DetailScreen({ record, onClose, records, tags }) {
   const handleCancel = () => {
     editInitRef.current = false;
     setEditMode(false);
-    setEditImageFile(null);
+    setEditImgBase64(null);
     setAllImageBase64([]);
   };
 
@@ -373,7 +312,7 @@ export function DetailScreen({ record, onClose, records, tags }) {
   const headerTitle = category === 'diary' ? '活動日記' : category === 'bed' ? '畝の記録' : '野菜記録';
   const headerBg    = category === 'diary' ? COLORS.diaryBg : category === 'bed' ? COLORS.bedBg : COLORS.card;
 
-  // veggie 編集モードの表示: 新規選択があれば editImgBase64、なければ viewImgBase64
+  // veggie 表示: 編集中は新規選択があれば editImgBase64、なければ viewImgBase64
   const veggieDisplaySrc = editMode ? (editImgBase64 || viewImgBase64) : viewImgBase64;
 
   return (
@@ -443,10 +382,25 @@ export function DetailScreen({ record, onClose, records, tags }) {
                 <div style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 8 }}>
                   <button onClick={() => cameraRef.current?.click()} style={editImgBtnStyle}>📷 カメラ</button>
                   <button onClick={() => albumRef.current?.click()} style={editImgBtnStyle}>🖼️ アルバム</button>
+                  {/* veggie編集: 選択後すぐにcompressImage → editImgBase64にセット */}
                   <input ref={cameraRef} type="file" accept="image/*" capture="environment"
-                    style={{ display: 'none' }} onChange={(e) => setEditImageFile(e.target.files[0] || null)} />
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      const b64 = await compressImage(file);
+                      if (b64) setEditImgBase64(b64);
+                      if (cameraRef.current) cameraRef.current.value = '';
+                    }} />
                   <input ref={albumRef} type="file" accept="image/*"
-                    style={{ display: 'none' }} onChange={(e) => setEditImageFile(e.target.files[0] || null)} />
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      const b64 = await compressImage(file);
+                      if (b64) setEditImgBase64(b64);
+                      if (albumRef.current) albumRef.current.value = '';
+                    }} />
                 </div>
               )}
             </div>
@@ -478,7 +432,6 @@ export function DetailScreen({ record, onClose, records, tags }) {
         {category === 'bed' && (
           <>
             <ImageGrid
-              blobs={undefined}
               srcs={editMode ? allImageBase64 : (record.imageBase64s ?? [])}
               editable={editMode}
               onRemove={handleRemoveImage}
@@ -489,9 +442,11 @@ export function DetailScreen({ record, onClose, records, tags }) {
                   <button onClick={() => cameraRef.current?.click()} style={editImgBtnStyle}>📷 追加（カメラ）</button>
                   <button onClick={() => albumRef.current?.click()} style={editImgBtnStyle}>🖼️ 追加（アルバム）</button>
                   <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple
-                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files, cameraRef)} />
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleAddImages(e.target.files, cameraRef)} />
                   <input ref={albumRef} type="file" accept="image/*" multiple
-                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files, albumRef)} />
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleAddImages(e.target.files, albumRef)} />
                 </div>
               </div>
             )}
@@ -526,7 +481,6 @@ export function DetailScreen({ record, onClose, records, tags }) {
         {category === 'diary' && (
           <>
             <ImageGrid
-              blobs={undefined}
               srcs={editMode ? allImageBase64 : (record.imageBase64s ?? [])}
               editable={editMode}
               onRemove={handleRemoveImage}
@@ -537,9 +491,11 @@ export function DetailScreen({ record, onClose, records, tags }) {
                   <button onClick={() => cameraRef.current?.click()} style={editImgBtnStyle}>📷 追加</button>
                   <button onClick={() => albumRef.current?.click()} style={editImgBtnStyle}>🖼️ 追加</button>
                   <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple
-                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files, cameraRef)} />
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleAddImages(e.target.files, cameraRef)} />
                   <input ref={albumRef} type="file" accept="image/*" multiple
-                    style={{ display: 'none' }} onChange={(e) => handleAddImages(e.target.files, albumRef)} />
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleAddImages(e.target.files, albumRef)} />
                 </div>
               </div>
             )}
@@ -589,10 +545,7 @@ export function DetailScreen({ record, onClose, records, tags }) {
       }}>
         {editMode ? (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={handleCancel}
-              style={cancelBtnStyle}
-            >キャンセル</button>
+            <button onClick={handleCancel} style={cancelBtnStyle}>キャンセル</button>
             <button
               onClick={handleSave}
               disabled={saving}

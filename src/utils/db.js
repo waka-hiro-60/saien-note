@@ -30,12 +30,11 @@ export async function compressImage(file) {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('FileReader失敗'));
     reader.onload = (e) => {
-      const dataUrl = e.target.result; // "data:image/jpeg;base64,..."
+      const dataUrl = e.target.result;
       if (!dataUrl) { reject(new Error('dataUrl取得失敗')); return; }
 
       const img = new Image();
       img.onerror = () => {
-        // 圧縮失敗時はそのままBase64で返す
         resolve(dataUrl);
       };
       img.onload = () => {
@@ -49,12 +48,12 @@ export async function compressImage(file) {
           const canvas = document.createElement('canvas');
           canvas.width = width; canvas.height = height;
           const ctx = canvas.getContext('2d');
-          if (!ctx) { resolve(dataUrl); return; } // canvas失敗時はそのまま返す
+          if (!ctx) { resolve(dataUrl); return; }
           ctx.drawImage(img, 0, 0, width, height);
           const compressed = canvas.toDataURL('image/jpeg', 0.8);
           resolve(compressed && compressed !== 'data:,' ? compressed : dataUrl);
         } catch (err) {
-          resolve(dataUrl); // 圧縮失敗時はそのまま返す
+          resolve(dataUrl);
         }
       };
       img.src = dataUrl;
@@ -63,32 +62,10 @@ export async function compressImage(file) {
   });
 }
 
-// Base64文字列 → Blob（表示用）
-export function base64ToBlob(dataUrl) {
-  if (!dataUrl) return null;
-  try {
-    const parts = dataUrl.split(',');
-    if (parts.length < 2) return null;
-    const mime = parts[0].match(/:(.*?);/)?.[1] ?? 'image/jpeg';
-    const bin  = atob(parts[1]);
-    const arr  = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    return new Blob([arr], { type: mime });
-  } catch (e) {
-    return null;
-  }
-}
-
 // Base64文字列からBlobURLを生成（画像表示用）
 export function createImageUrl(imageData) {
   if (!imageData) return null;
-  if (typeof imageData === 'string') {
-    // Base64文字列の場合はそのまま返す
-    return imageData;
-  }
-  if (imageData instanceof Blob) {
-    return URL.createObjectURL(imageData);
-  }
+  if (typeof imageData === 'string') return imageData;
   return null;
 }
 
@@ -105,6 +82,12 @@ export async function getAllRecords() {
 
 export async function getRecord(id) { return get(id, recordsStore); }
 
+// ─── addRecord ───────────────────────────────────────────────────────────────
+// 全カテゴリ共通: コンポーネント側で圧縮済みのBase64を受け取る。
+// ここでは圧縮しない。
+// veggie  : data.imageBase64（文字列 | null）
+// bed/diary: data.imageBase64s（文字列配列）
+// ─────────────────────────────────────────────────────────────────────────────
 export async function addRecord(data) {
   const now = Date.now();
   const id  = crypto.randomUUID();
@@ -112,33 +95,29 @@ export async function addRecord(data) {
   let record;
 
   if (category === 'diary') {
-    // imageBase64s（既変換済み）があればそのまま使う、なければFileから変換
-    let images = data.imageBase64s ?? [];
-    if (images.length === 0 && data.imageFiles) {
-      const fileList = Array.from(data.imageFiles);
-      for (let i = 0; i < fileList.length; i++) {
-        try { images.push(await compressImage(fileList[i])); }
-        catch (e) { throw new Error('diary画像' + (i+1) + '枚目失敗:' + errMsg(e)); }
-      }
-    }
-    record = { id, category: 'diary', date: data.date ?? '', time: data.time ?? '', imageBase64s: images, text: data.text ?? '', archived: false, published: false, createdAt: now, updatedAt: now };
+    record = {
+      id, category: 'diary',
+      date: data.date ?? '', time: data.time ?? '',
+      imageBase64s: data.imageBase64s ?? [],
+      text: data.text ?? '',
+      archived: false, published: false, createdAt: now, updatedAt: now,
+    };
   } else if (category === 'bed') {
-    let images = data.imageBase64s ?? [];
-    if (images.length === 0 && data.imageFiles) {
-      const fileList = Array.from(data.imageFiles);
-      for (let i = 0; i < fileList.length; i++) {
-        try { images.push(await compressImage(fileList[i])); }
-        catch (e) { throw new Error('bed画像' + (i+1) + '枚目失敗:' + errMsg(e)); }
-      }
-    }
-    record = { id, category: 'bed', date: data.date ?? '', time: data.time ?? '', imageBase64s: images, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
+    record = {
+      id, category: 'bed',
+      date: data.date ?? '', time: data.time ?? '',
+      imageBase64s: data.imageBase64s ?? [],
+      comment: data.comment ?? '', tags: data.tags ?? [],
+      archived: false, published: false, createdAt: now, updatedAt: now,
+    };
   } else {
-    let imageBase64 = null;
-    if (data.imageFile) {
-      try { imageBase64 = await compressImage(data.imageFile); }
-      catch (e) { throw new Error('veggie画像失敗:' + errMsg(e)); }
-    }
-    record = { id, category: 'veggie', date: data.date ?? '', time: data.time ?? '', imageBase64, comment: data.comment ?? '', tags: data.tags ?? [], archived: false, published: false, createdAt: now, updatedAt: now };
+    record = {
+      id, category: 'veggie',
+      date: data.date ?? '', time: data.time ?? '',
+      imageBase64: data.imageBase64 ?? null,
+      comment: data.comment ?? '', tags: data.tags ?? [],
+      archived: false, published: false, createdAt: now, updatedAt: now,
+    };
   }
 
   try {
@@ -149,29 +128,32 @@ export async function addRecord(data) {
   return record;
 }
 
+// ─── updateRecord ─────────────────────────────────────────────────────────────
+// 全カテゴリ共通: コンポーネント側で圧縮済みのBase64を受け取る。
+// veggie  : updates.imageBase64 が渡された場合のみ上書き
+// bed/diary: updates.imageBase64s が渡された場合のみ上書き
+// ─────────────────────────────────────────────────────────────────────────────
 export async function updateRecord(id, updates) {
   const existing = await get(id, recordsStore);
   if (!existing) throw new Error('記録が見つかりません: ' + id);
   const category = existing.category ?? 'veggie';
-  const { imageFile, imageFiles, addImageFiles, images: newImagesArray, imageBase64s: newBase64s, ...restUpdates } = updates;
+
+  // imageBase64 / imageBase64s は個別処理するため destructure して除外
+  const { imageBase64: newImageBase64, imageBase64s: newBase64s, ...restUpdates } = updates;
   const base = { ...existing, ...restUpdates, updatedAt: Date.now() };
 
   if (category === 'veggie') {
-    if (imageFile) { base.imageBase64 = await compressImage(imageFile); }
-  } else {
-    let images = existing.imageBase64s ?? [];
-    if (newBase64s !== undefined) { images = newBase64s; }
-    else if (newImagesArray !== undefined) { images = newImagesArray; }
-    if (imageFiles && imageFiles.length > 0) {
-      const fileList = Array.from(imageFiles);
-      images = [];
-      for (let i = 0; i < fileList.length; i++) { images.push(await compressImage(fileList[i])); }
-    } else if (addImageFiles && addImageFiles.length > 0) {
-      const fileList = Array.from(addImageFiles);
-      for (let i = 0; i < fileList.length; i++) { images.push(await compressImage(fileList[i])); }
+    // 新しい画像が渡されたときのみ上書き（undefined の場合は既存を保持）
+    if (newImageBase64 !== undefined) {
+      base.imageBase64 = newImageBase64;
     }
-    base.imageBase64s = images;
+  } else {
+    // bed / diary: 配列ごと置き換え（undefined の場合は既存を保持）
+    if (newBase64s !== undefined) {
+      base.imageBase64s = newBase64s;
+    }
   }
+
   await set(id, base, recordsStore);
   return base;
 }

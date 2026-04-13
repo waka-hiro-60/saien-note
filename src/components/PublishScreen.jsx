@@ -14,11 +14,17 @@ const COLORS = {
   tagText:      '#3A6B47',
 };
 
-const IS_OWNER     = import.meta.env.VITE_OWNER_MODE === 'true';
-const API_BASE     = 'https://api.saien.career-life.tech';
+const API_BASE = 'https://api.saien.career-life.tech';
 
-// Blob → base64文字列
-function blobToBase64(blob) {
+// Base64プレフィックス（data:image/jpeg;base64,）を除去してWorkerへ送信できる形式にする
+function stripBase64Prefix(b64) {
+  if (!b64) return b64;
+  const idx = b64.indexOf(',');
+  return idx >= 0 ? b64.slice(idx + 1) : b64;
+}
+
+// 旧Blob形式の後方互換: Blob → base64文字列（プレフィックスなし）
+function blobToBase64Bare(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload  = () => resolve(reader.result.split(',')[1]);
@@ -29,32 +35,32 @@ function blobToBase64(blob) {
 
 // 1件の記録をWorkerに送信
 async function publishRecord(record, apiKey) {
-  // 画像をbase64に変換
   const imageBase64s = [];
+
   if (record.imageBase64) {
-    // 新フォーマット: veggie
-    imageBase64s.push(record.imageBase64.split(',')[1] ?? record.imageBase64);
+    // veggie（新フォーマット）
+    imageBase64s.push(stripBase64Prefix(record.imageBase64));
   } else if (record.imageBase64s && record.imageBase64s.length > 0) {
-    // 新フォーマット: bed/diary
+    // bed/diary（新フォーマット）
     for (const b64 of record.imageBase64s) {
-      imageBase64s.push(b64.split(',')[1] ?? b64);
+      imageBase64s.push(stripBase64Prefix(b64));
     }
   } else {
-    // 旧フォーマット: Blob
+    // 旧フォーマット（Blob）の後方互換
     const images = record.images ?? (record.imageBlob ? [record.imageBlob] : []);
     for (const blob of images) {
-      if (blob instanceof Blob) imageBase64s.push(await blobToBase64(blob));
+      if (blob instanceof Blob) imageBase64s.push(await blobToBase64Bare(blob));
     }
   }
 
   const body = {
-    id:           record.id,
-    category:     record.category ?? 'veggie',
-    date:         record.date,
-    time:         record.time ?? '',
-    comment:      record.comment ?? '',
-    text:         record.text ?? '',
-    tags:         record.tags ?? [],
+    id:          record.id,
+    category:    record.category ?? 'veggie',
+    date:        record.date,
+    time:        record.time ?? '',
+    comment:     record.comment ?? '',
+    text:        record.text ?? '',
+    tags:        record.tags ?? [],
     imageBase64s,
   };
 
@@ -81,7 +87,11 @@ function getCategoryIcon(r) {
   return '🥬';
 }
 
-export function PublishScreen({ records }) {
+// apiKey: useSettings から渡される文字列
+// IS_OWNER: apiKeyが設定されているかどうかで判定（環境変数は使用しない）
+export function PublishScreen({ records, apiKey }) {
+  const IS_OWNER = !!apiKey;
+
   const [selected,   setSelected]   = useState([]);
   const [publishing, setPublishing] = useState(false);
   const [progress,   setProgress]   = useState('');
@@ -101,11 +111,6 @@ export function PublishScreen({ records }) {
 
   const handlePublish = async () => {
     if (!IS_OWNER || selected.length === 0) return;
-    const apiKey = import.meta.env.VITE_API_KEY;
-    if (!apiKey) {
-      setError('VITE_API_KEY が設定されていません');
-      return;
-    }
 
     setPublishing(true);
     setError(null);
@@ -122,7 +127,7 @@ export function PublishScreen({ records }) {
       setSuccessMsg(`${targets.length}件を公開しました`);
     } catch (e) {
       console.error(e);
-      setError(e.message);
+      setError(e != null ? (e.message ?? String(e)) : '公開に失敗しました');
     } finally {
       setPublishing(false);
       setProgress('');
@@ -130,18 +135,15 @@ export function PublishScreen({ records }) {
   };
 
   const handleUnpublish = async (id) => {
-    const apiKey = import.meta.env.VITE_API_KEY;
     try {
-      if (apiKey) {
-        await fetch(`${API_BASE}/record/${id}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${apiKey}` },
-        });
-      }
+      await fetch(`${API_BASE}/record/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
       await records.unpublish(id);
     } catch (e) {
       console.error(e);
-      setError(e.message);
+      setError(e != null ? (e.message ?? String(e)) : '非公開への変更に失敗しました');
     }
   };
 
@@ -175,10 +177,12 @@ export function PublishScreen({ records }) {
             <span style={{ fontSize: 17, fontWeight: 600, color: COLORS.text }}>
               未公開の記録（{unpublished.length}件）
             </span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={selectAll} style={btnStyle}>全選択</button>
-              <button onClick={clearAll}  style={btnStyle}>解除</button>
-            </div>
+            {IS_OWNER && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={selectAll} style={btnStyle}>全選択</button>
+                <button onClick={clearAll}  style={btnStyle}>解除</button>
+              </div>
+            )}
           </div>
 
           {records.loading ? (
@@ -195,24 +199,27 @@ export function PublishScreen({ records }) {
                 return (
                   <div
                     key={r.id}
-                    onClick={() => toggleSelect(r.id)}
+                    onClick={() => IS_OWNER && toggleSelect(r.id)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 12,
                       background: checked ? COLORS.primaryLight : COLORS.card,
                       border: `1px solid ${checked ? COLORS.primary : COLORS.border}`,
-                      borderRadius: 10, padding: '12px 16px', cursor: 'pointer',
+                      borderRadius: 10, padding: '12px 16px',
+                      cursor: IS_OWNER ? 'pointer' : 'default',
                       minHeight: 56,
                     }}
                   >
-                    <div style={{
-                      width: 26, height: 26, borderRadius: 8,
-                      border: `2px solid ${checked ? COLORS.primary : COLORS.border}`,
-                      background: checked ? COLORS.primary : 'transparent',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0,
-                    }}>
-                      {checked && <span style={{ color: '#fff', fontSize: 16 }}>✓</span>}
-                    </div>
+                    {IS_OWNER && (
+                      <div style={{
+                        width: 26, height: 26, borderRadius: 8,
+                        border: `2px solid ${checked ? COLORS.primary : COLORS.border}`,
+                        background: checked ? COLORS.primary : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>
+                        {checked && <span style={{ color: '#fff', fontSize: 16 }}>✓</span>}
+                      </div>
+                    )}
                     <span style={{ fontSize: 20 }}>{getCategoryIcon(r)}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 16, color: COLORS.textLight }}>{r.date}{r.time ? ` ${r.time}` : ''}</div>
@@ -281,7 +288,7 @@ export function PublishScreen({ records }) {
         </div>
       </div>
 
-      {/* 公開ボタン */}
+      {/* 公開ボタン（オーナーのみ表示） */}
       {IS_OWNER && (
         <div style={{
           padding: '12px 16px',

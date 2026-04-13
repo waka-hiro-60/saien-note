@@ -5,7 +5,6 @@ import { compressImage } from '../utils/db';
 // 画像ファイルから日時を取得して { date: 'YYYY-MM-DD', time: 'HH:MM' } を返す
 // ① exifr の DateTimeOriginal → ② File.lastModified → ③ null（今日の日付のまま）
 async function getDateTimeFromFile(file) {
-  // ① exifr で DateTimeOriginal を試みる
   try {
     const exifr = (await import('exifr')).default;
     const result = await exifr.parse(file, ['DateTimeOriginal']);
@@ -21,10 +20,9 @@ async function getDateTimeFromFile(file) {
     }
     console.log('[Exif] DateTimeOriginal が取得できなかった。File.lastModified を試みる…');
   } catch (e) {
-    console.log('[Exif] exifr.parse() 失敗 (iOS等):', e != null ? e.message : 'null error', '→ File.lastModified を試みる…');
+    console.log('[Exif] exifr.parse() 失敗:', e != null ? e.message : 'null error', '→ File.lastModified を試みる…');
   }
 
-  // ② File.lastModified をフォールバックとして使用
   if (file.lastModified) {
     try {
       const d = new Date(file.lastModified);
@@ -35,11 +33,10 @@ async function getDateTimeFromFile(file) {
         return { date, time };
       }
     } catch (e) {
-      console.log('[Exif] File.lastModified も失敗:', e.message);
+      console.log('[Exif] File.lastModified も失敗:', e != null ? e.message : 'null error');
     }
   }
 
-  // ③ 今日の日付のまま
   console.log('[Exif] ③ Exif・lastModified ともに取得不可。今日の日付を使用。');
   return null;
 }
@@ -76,9 +73,9 @@ function toLocalTime() {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-// 複数画像プレビューコンポーネント
-function MultiImagePreview({ files: srcs, onRemove, onAddCamera, onAddAlbum, cameraRef, albumRef }) {
-
+// ─── 複数画像プレビュー（bed / diary 用） ───
+// files: Base64文字列配列
+function MultiImagePreview({ files: srcs, onRemove, cameraRef, albumRef }) {
   return (
     <div style={{ padding: 12, background: '#111' }}>
       {srcs.length > 0 && (
@@ -92,30 +89,30 @@ function MultiImagePreview({ files: srcs, onRemove, onAddCamera, onAddAlbum, cam
             gap: 6,
             marginBottom: 10,
           }}>
-          {srcs.map((src, i) => (
-            <div key={i} style={{ position: 'relative', paddingTop: '100%' }}>
-              <img
-                src={src}
-                alt=""
-                style={{
-                  position: 'absolute', inset: 0,
-                  width: '100%', height: '100%', objectFit: 'cover',
-                  borderRadius: 6,
-                }}
-              />
-              <button
-                onClick={() => onRemove(i)}
-                style={{
-                  position: 'absolute', top: 2, right: 2,
-                  width: 24, height: 24, borderRadius: '50%',
-                  border: 'none', background: 'rgba(0,0,0,0.6)',
-                  color: '#fff', fontSize: 14, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  padding: 0,
-                }}
-              >✕</button>
-            </div>
-          ))}
+            {srcs.map((src, i) => (
+              <div key={i} style={{ position: 'relative', paddingTop: '100%' }}>
+                <img
+                  src={src}
+                  alt=""
+                  style={{
+                    position: 'absolute', inset: 0,
+                    width: '100%', height: '100%', objectFit: 'cover',
+                    borderRadius: 6,
+                  }}
+                />
+                <button
+                  onClick={() => onRemove(i)}
+                  style={{
+                    position: 'absolute', top: 2, right: 2,
+                    width: 24, height: 24, borderRadius: '50%',
+                    border: 'none', background: 'rgba(0,0,0,0.6)',
+                    color: '#fff', fontSize: 14, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: 0,
+                  }}
+                >✕</button>
+              </div>
+            ))}
           </div>
         </>
       )}
@@ -154,27 +151,19 @@ function MultiImagePreview({ files: srcs, onRemove, onAddCamera, onAddAlbum, cam
   );
 }
 
-// 単一画像プレビューコンポーネント（野菜記録用）
-function SingleImagePreview({ imageFile, onCamera, onAlbum, cameraRef, albumRef }) {
-  const [url, setUrl] = useState(null);
-
-  useEffect(() => {
-    if (!imageFile) { setUrl(null); return; }
-    const u = URL.createObjectURL(imageFile);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [imageFile]);
-
+// ─── 単一画像プレビュー（veggie 用） ───
+// src: Base64文字列 | null
+function SingleImagePreview({ src, cameraRef, albumRef }) {
   return (
     <div style={{
       background: '#000', minHeight: 200,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       position: 'relative',
     }}>
-      {url ? (
+      {src ? (
         <>
           <img
-            src={url}
+            src={src}
             alt="プレビュー"
             style={{ width: '100%', maxHeight: 280, objectFit: 'contain', display: 'block' }}
           />
@@ -234,16 +223,16 @@ function SingleImagePreview({ imageFile, onCamera, onAlbum, cameraRef, albumRef 
 }
 
 export function AddScreen({ records, tags, onDone }) {
-  const [mode,       setMode]       = useState('veggie');
-  const [imageFile,  setImageFile]  = useState(null);   // veggie用
-  const [imageBase64s, setImageBase64s] = useState([]); // bed/diary用（Base64文字列配列）
-  const [date,       setDate]       = useState(toLocalDate());
-  const [time,       setTime]       = useState(toLocalTime());
-  const [comment,    setComment]    = useState('');
-  const [text,       setText]       = useState('');     // diary用
-  const [selTags,    setSelTags]    = useState([]);
-  const [saving,     setSaving]     = useState(false);
-  const [error,      setError]      = useState(null);
+  const [mode,         setMode]         = useState('veggie');
+  const [imageBase64,  setImageBase64]  = useState(null);  // veggie用（Base64文字列）
+  const [imageBase64s, setImageBase64s] = useState([]);    // bed/diary用（Base64文字列配列）
+  const [date,         setDate]         = useState(toLocalDate());
+  const [time,         setTime]         = useState(toLocalTime());
+  const [comment,      setComment]      = useState('');
+  const [text,         setText]         = useState('');
+  const [selTags,      setSelTags]      = useState([]);
+  const [saving,       setSaving]       = useState(false);
+  const [error,        setError]        = useState(null);
 
   const cameraRef = useRef();
   const albumRef  = useRef();
@@ -254,7 +243,7 @@ export function AddScreen({ records, tags, onDone }) {
 
   // モード変更時にリセット
   useEffect(() => {
-    setImageFile(null);
+    setImageBase64(null);
     setImageBase64s([]);
     setSelTags([]);
     setComment('');
@@ -270,14 +259,10 @@ export function AddScreen({ records, tags, onDone }) {
 
       if (!isSelected) {
         if (mode === 'veggie' && veggieTags.includes(tag)) {
-          // 野菜を選択 → 対応する畝を自動ON
           for (const [bed, veggies] of Object.entries(bedVeggieMap)) {
-            if (veggies.includes(tag) && !next.includes(bed)) {
-              next.push(bed);
-            }
+            if (veggies.includes(tag) && !next.includes(bed)) next.push(bed);
           }
         } else if (mode === 'bed' && placeTags.includes(tag)) {
-          // 畝を選択 → 対応する野菜を自動ON
           const linked = bedVeggieMap[tag] ?? [];
           for (const v of linked) {
             if (!next.includes(v)) next.push(v);
@@ -289,10 +274,10 @@ export function AddScreen({ records, tags, onDone }) {
     });
   }, [mode, veggieTags, placeTags, bedVeggieMap]);
 
-  // ─── bed/diary 複数画像操作（選択直後にBase64変換・iOS Safari対応） ───
+  // ─── bed/diary 複数画像操作 ───
+  // ⚠️ input.value='' はファイル処理が全部終わった後にクリアする（iOS Safari対応）
   const addImageFiles = async (files, inputRef) => {
     const arr = Array.from(files);
-    if (inputRef?.current) inputRef.current.value = '';
     for (const file of arr) {
       try {
         const base64 = await compressImage(file);
@@ -301,6 +286,7 @@ export function AddScreen({ records, tags, onDone }) {
         console.warn('画像変換失敗:', e);
       }
     }
+    if (inputRef?.current) inputRef.current.value = '';
   };
 
   const removeImageFile = (index) => {
@@ -328,16 +314,14 @@ export function AddScreen({ records, tags, onDone }) {
           tags: selTags,
         });
       } else {
-        console.log('[handleSave] veggie 保存開始 imageFile:', imageFile ? `${imageFile.name}(${imageFile.size}bytes)` : 'なし');
         await records.add({
           category: 'veggie',
           date, time,
-          imageFile: imageFile || null,
+          imageBase64: imageBase64 ?? null,
           comment,
           tags: selTags,
         });
       }
-      console.log('[handleSave] 保存完了');
       onDone();
     } catch (e) {
       console.error('[handleSave] 保存エラー:', e);
@@ -398,7 +382,7 @@ export function AddScreen({ records, tags, onDone }) {
         {/* 写真エリア */}
         {mode === 'veggie' ? (
           <SingleImagePreview
-            imageFile={imageFile}
+            src={imageBase64}
             cameraRef={cameraRef}
             albumRef={albumRef}
           />
@@ -412,6 +396,7 @@ export function AddScreen({ records, tags, onDone }) {
         )}
 
         {/* hidden file inputs */}
+        {/* カメラ（単写真） */}
         <input
           ref={cameraRef}
           type="file" accept="image/*" capture="environment"
@@ -420,9 +405,11 @@ export function AddScreen({ records, tags, onDone }) {
             const file = e.target.files[0];
             if (!file) return;
             if (mode === 'veggie') {
-              setImageFile(file);
-              e.target.value = '';
-              const dt = await getDateTimeFromFile(file);
+              // EXIF読み取り → 圧縮 → input クリア（処理後）
+              const dt  = await getDateTimeFromFile(file);
+              const b64 = await compressImage(file);
+              if (b64) setImageBase64(b64);
+              if (cameraRef.current) cameraRef.current.value = '';
               if (dt) { setDate(dt.date); setTime(dt.time); }
             } else {
               const isFirst = imageBase64s.length === 0;
@@ -432,6 +419,7 @@ export function AddScreen({ records, tags, onDone }) {
             }
           }}
         />
+        {/* アルバム（複数選択可） */}
         <input
           ref={albumRef}
           type="file" accept="image/*" multiple
@@ -440,9 +428,11 @@ export function AddScreen({ records, tags, onDone }) {
             const files = e.target.files;
             if (!files || files.length === 0) return;
             if (mode === 'veggie') {
-              setImageFile(files[0]);
-              e.target.value = '';
-              const dt = await getDateTimeFromFile(files[0]);
+              const file = files[0];
+              const dt  = await getDateTimeFromFile(file);
+              const b64 = await compressImage(file);
+              if (b64) setImageBase64(b64);
+              if (albumRef.current) albumRef.current.value = '';
               if (dt) { setDate(dt.date); setTime(dt.time); }
             } else {
               const isFirst = imageBase64s.length === 0;
@@ -493,7 +483,7 @@ export function AddScreen({ records, tags, onDone }) {
             </div>
           </div>
 
-          {/* 活動日記: テキストエリア（大） */}
+          {/* 活動日記: テキストエリア */}
           {mode === 'diary' && (
             <div>
               <div style={{ fontSize: 16, color: COLORS.textLight, marginBottom: 6 }}>
