@@ -149,14 +149,15 @@ export async function updateRecord(id, updates) {
   const existing = await get(id, recordsStore);
   if (!existing) throw new Error('記録が見つかりません: ' + id);
   const category = existing.category ?? 'veggie';
-  const { imageFile, imageFiles, addImageFiles, images: newImagesArray, ...restUpdates } = updates;
+  const { imageFile, imageFiles, addImageFiles, images: newImagesArray, imageBase64s: newBase64s, ...restUpdates } = updates;
   const base = { ...existing, ...restUpdates, updatedAt: Date.now() };
 
   if (category === 'veggie') {
     if (imageFile) { base.imageBase64 = await compressImage(imageFile); }
   } else {
     let images = existing.imageBase64s ?? [];
-    if (newImagesArray !== undefined) { images = newImagesArray; }
+    if (newBase64s !== undefined) { images = newBase64s; }
+    else if (newImagesArray !== undefined) { images = newImagesArray; }
     if (imageFiles && imageFiles.length > 0) {
       const fileList = Array.from(imageFiles);
       images = [];
