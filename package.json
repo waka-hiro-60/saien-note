@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node -e \"import('fs').then(fs=>fs.copyFileSync('gallery.html','dist/index.html'))\"",
     "lint": "eslint .",
     "preview": "vite preview"
   },

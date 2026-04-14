@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>自給菜園ノート | 種を蒔く。コードを書く。未来へ渡す。</title>
+  <meta name="description" content="60歳からの菜園と記録。AIと共に作ったアプリで、種を蒔き、コードを書き、未来へ渡す。時代進（キャリア＆ライフデザイン研究所）">
+  <meta property="og:title" content="自給菜園ノート | 種を蒔く。コードを書く。未来へ渡す。">
+  <meta property="og:description" content="60歳からの菜園と記録。AIと対話しながら、100年時代の地図を描いている途中。">
+  <meta property="og:type" content="website">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&family=Noto+Sans+JP:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* ============================================
+       CSS変数 [TEMPLATE] 将来のアプリでも流用
+       ============================================ */
+    :root {
+      --bg:            #F7F5F0;
+      --card:          #FFFFFF;
+      --primary:       #4A7C59;
+      --primary-light: #E8F0E9;
+      --accent:        #C8A96E;
+      --text:          #2C2C2C;
+      --text-light:    #888888;
+      --border:        #E5E0D8;
+      --font-serif:    'Noto Serif JP', serif;
+      --font-sans:     'Noto Sans JP', sans-serif;
+      --max-w:         720px;
+      --radius:        12px;
+    }
+
+    /* ============================================
+       リセット・ベース [TEMPLATE]
+       ============================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html  { scroll-behavior: smooth; }
+    body  {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.75;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    img { display: block; width: 100%; }
+
+    .container { max-width: var(--max-w); margin: 0 auto; padding: 0 1.25rem; }
+    section { padding: 4rem 0; }
+    .section-label {
+      font-size: 0.75rem; font-weight: 500; letter-spacing: 0.1em;
+      color: var(--text-light); text-transform: uppercase; margin-bottom: 0.5rem;
+    }
+    .section-title {
+      font-family: var(--font-serif); font-size: 1.375rem;
+      font-weight: 700; margin-bottom: 1.5rem; color: var(--text);
+    }
+
+    /* ============================================
+       サイトヘッダー [TEMPLATE]
+       ============================================ */
+    .site-header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(247,245,240,0.92);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 0.875rem 1.25rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { font-family: var(--font-serif); font-size: 1rem; font-weight: 700; color: var(--primary); }
+    .logo-sub { font-size: 0.6875rem; color: var(--text-light); font-weight: 400; margin-left: 0.375rem; letter-spacing: 0.04em; }
+    .header-nav { display: flex; gap: 1.25rem; }
+    .header-nav a { font-size: 0.8125rem; color: var(--text-light); font-weight: 500; }
+    .header-nav a:hover { color: var(--primary); text-decoration: none; }
+
+    /* ============================================
+       ヒーロー [APP-SPECIFIC]
+       ============================================ */
+    .hero { padding: 5rem 0 4rem; position: relative; overflow: hidden; }
+    .hero::before {
+      content: ''; position: absolute; top: -80px; right: -80px;
+      width: 320px; height: 320px;
+      background: radial-gradient(circle, rgba(74,124,89,0.07) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-eyebrow { font-size: 0.8125rem; color: var(--accent); font-weight: 500; letter-spacing: 0.06em; margin-bottom: 1.25rem; }
+    .hero-catchphrase {
+      font-family: var(--font-serif);
+      font-size: clamp(1.875rem, 6vw, 2.75rem);
+      font-weight: 700; line-height: 1.6; color: var(--text); margin-bottom: 2rem;
+    }
+    .hero-catchphrase .dot { color: var(--accent); }
+    .hero-intro {
+      font-size: 1rem; line-height: 2.1; max-width: 560px;
+      border-left: 3px solid var(--accent); padding-left: 1.25rem; margin-bottom: 1.5rem;
+    }
+    .hero-author { font-size: 0.875rem; color: var(--text-light); }
+    .hero-author strong { color: var(--primary); font-family: var(--font-serif); }
+
+    /* ============================================
+       3本柱 [TEMPLATE]
+       ============================================ */
+    .pillars { background: var(--card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .pillars-grid { display: grid; grid-template-columns: 1fr; gap: 2.5rem; }
+    @media (min-width: 600px) { .pillars-grid { grid-template-columns: repeat(3, 1fr); gap: 2rem; } }
+    .pillar { display: flex; flex-direction: column; gap: 0.625rem; }
+    .pillar-icon  { font-size: 1.75rem; line-height: 1; }
+    .pillar-title { font-family: var(--font-serif); font-size: 1.0625rem; font-weight: 700; }
+    .pillar-body  { font-size: 0.9375rem; color: var(--text-light); line-height: 1.9; }
+
+    /* ============================================
+       ギャラリー [APP-SPECIFIC]
+       ============================================ */
+    .gallery-header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem; }
+    #record-count { font-size: 0.8125rem; color: var(--text-light); }
+
+    .filters { display: flex; flex-direction: column; gap: 0.875rem; margin-bottom: 1.5rem; }
+    .filter-label { font-size: 0.6875rem; color: var(--text-light); letter-spacing: 0.06em; margin-bottom: 0.3rem; }
+    .filter-row  { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .scroll-row  { display: flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+    .scroll-row::-webkit-scrollbar { display: none; }
+
+    .filter-btn {
+      padding: 0.375rem 1rem; border-radius: 999px; border: 1.5px solid var(--border);
+      background: var(--card); color: var(--text-light); font-size: 0.8125rem;
+      font-family: var(--font-sans); cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .filter-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .filter-btn:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
+
+    .chip-btn {
+      padding: 0.25rem 0.75rem; border-radius: 999px; border: 1.5px solid var(--border);
+      background: transparent; color: var(--text-light); font-size: 0.75rem;
+      font-family: var(--font-sans); cursor: pointer; transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+    }
+    .chip-btn.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+
+    .gallery-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.875rem; }
+    @media (min-width: 520px) { .gallery-grid { grid-template-columns: repeat(3, 1fr); } }
+
+    .record-card {
+      background: var(--card); border-radius: var(--radius); overflow: hidden;
+      border: 1px solid var(--border); cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .record-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+    .card-image       { width: 100%; aspect-ratio: 4/3; object-fit: cover; }
+    .card-placeholder { width: 100%; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; font-size: 2rem; }
+    .card-placeholder.veggie { background: #F0F7F0; }
+    .card-placeholder.bed    { background: #EEF5EE; }
+    .card-placeholder.diary  { background: #FFF8F0; }
+    .card-body    { padding: 0.625rem 0.75rem 0.75rem; }
+    .card-meta    { display: flex; align-items: center; gap: 0.375rem; margin-bottom: 0.375rem; flex-wrap: wrap; }
+    .card-date    { font-size: 0.6875rem; color: var(--text-light); }
+    .card-category { font-size: 0.625rem; padding: 0.1rem 0.5rem; border-radius: 999px; font-weight: 500; }
+    .cat-veggie   { background: #E8F0E9; color: #3A6B47; }
+    .cat-bed      { background: #E8F0E9; color: #3A6B47; }
+    .cat-diary    { background: #FFF0DC; color: #8B6914; }
+    .card-comment {
+      font-size: 0.8125rem; color: var(--text); line-height: 1.55;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .card-tags    { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-top: 0.5rem; }
+    .card-tag     { font-size: 0.625rem; background: var(--primary-light); color: var(--primary); padding: 0.1rem 0.5rem; border-radius: 999px; }
+    .harvest-badge {
+      display: inline-flex; align-items: center; gap: 0.2rem;
+      font-size: 0.6875rem; background: #FFF3CC; color: #7A5C00;
+      padding: 0.1rem 0.5rem; border-radius: 999px; font-weight: 500; margin-top: 0.375rem;
+    }
+    .gallery-status { grid-column: 1/-1; text-align: center; padding: 3.5rem 0; color: var(--text-light); font-size: 0.9375rem; line-height: 2; }
+    .skeleton-card { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+    .skeleton-img  { width: 100%; aspect-ratio: 4/3; background: linear-gradient(90deg,#e8e4dc 25%,#f0ece4 50%,#e8e4dc 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+    .skeleton-text { padding: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .skeleton-line { height: 10px; border-radius: 4px; background: linear-gradient(90deg,#e8e4dc 25%,#f0ece4 50%,#e8e4dc 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    /* ============================================
+       アプリCTA [APP-SPECIFIC]
+       [MONETIZATION] 有料化: href→Stripe URL, テキスト変更
+       ============================================ */
+    .app-cta {
+      background: var(--primary-light); border-radius: var(--radius);
+      padding: 2rem 1.5rem; margin-top: 2.5rem; text-align: center;
+      border: 1px solid rgba(74,124,89,0.2);
+    }
+    .app-cta-eyebrow { font-size: 0.8125rem; color: var(--primary); margin-bottom: 0.625rem; }
+    .app-cta-title   { font-family: var(--font-serif); font-size: 1.1875rem; font-weight: 700; margin-bottom: 0.625rem; }
+    .app-cta-desc    { font-size: 0.9375rem; color: var(--text-light); margin-bottom: 1.5rem; line-height: 1.85; }
+    .btn-primary {
+      display: inline-block; background: var(--primary); color: #fff;
+      font-size: 1rem; font-weight: 500; font-family: var(--font-sans);
+      padding: 0.875rem 2rem; border-radius: 999px; border: none;
+      cursor: pointer; text-decoration: none; min-height: 48px;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-primary:hover { background: #3a6848; text-decoration: none; transform: translateY(-1px); }
+    .btn-note { display: block; font-size: 0.75rem; color: var(--text-light); margin-top: 0.625rem; }
+
+    /* ============================================
+       PWA説明セクション [APP-SPECIFIC]
+       ============================================ */
+    .pwa-section { background: var(--card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .pwa-points { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+    @media (min-width: 520px) { .pwa-points { grid-template-columns: repeat(4, 1fr); } }
+    .pwa-point { text-align: center; padding: 1.25rem 0.75rem; background: var(--bg); border-radius: var(--radius); }
+    .pwa-point-icon  { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .pwa-point-label { font-size: 0.8125rem; font-weight: 500; margin-bottom: 0.25rem; }
+    .pwa-point-desc  { font-size: 0.75rem; color: var(--text-light); line-height: 1.6; }
+
+    .screenshots { display: flex; gap: 0.875rem; overflow-x: auto; padding-bottom: 4px; margin-bottom: 2rem; scrollbar-width: none; }
+    .screenshots::-webkit-scrollbar { display: none; }
+    .screenshot-frame {
+      flex-shrink: 0; width: 160px; aspect-ratio: 9/19;
+      background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--radius);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;
+    }
+    /* 実機SS追加後: .screenshot-frame img { width:100%; height:100%; object-fit:cover; } */
+    .screenshot-label { font-size: 0.6875rem; color: var(--text-light); text-align: center; padding: 0 0.5rem; }
+
+    .install-steps { display: flex; flex-direction: column; gap: 0.75rem; }
+    .install-step  { display: flex; align-items: flex-start; gap: 0.875rem; }
+    .step-num  { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 0.8125rem; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 0.15rem; }
+    .step-text { font-size: 0.9375rem; line-height: 1.7; }
+    .step-text small { display: block; font-size: 0.8125rem; color: var(--text-light); }
+
+    /* ============================================
+       制作過程セクション [APP-SPECIFIC]
+       ============================================ */
+    .making-card { background: var(--card); border-radius: var(--radius); padding: 1.5rem; border: 1px solid var(--border); margin-bottom: 1rem; }
+    .making-card-title { font-family: var(--font-serif); font-size: 1rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .making-card-body  { font-size: 0.9375rem; color: var(--text-light); line-height: 1.85; }
+    .tech-chips { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.875rem; }
+    .tech-chip  { font-size: 0.75rem; background: var(--bg); border: 1px solid var(--border); color: var(--text-light); padding: 0.2rem 0.625rem; border-radius: 4px; font-family: monospace; }
+    .link-arrow { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.9375rem; color: var(--primary); font-weight: 500; margin-top: 1.25rem; }
+    .link-arrow:hover { text-decoration: none; gap: 0.5rem; }
+
+    /* ============================================
+       フッター [TEMPLATE]
+       ============================================ */
+    .site-footer { background: #232B25; color: rgba(255,255,255,0.65); padding: 3.5rem 0 2rem; }
+    .footer-inner { display: flex; flex-direction: column; gap: 2rem; }
+    @media (min-width: 600px) { .footer-inner { flex-direction: row; justify-content: space-between; align-items: flex-start; } }
+    .footer-brand .name    { font-family: var(--font-serif); font-size: 1rem; font-weight: 700; color: #fff; margin-bottom: 0.5rem; }
+    .footer-brand .tagline { font-size: 0.875rem; line-height: 1.85; }
+    .footer-links { display: flex; flex-direction: column; gap: 0.875rem; }
+    .footer-links a { font-size: 0.875rem; color: rgba(255,255,255,0.65); display: flex; align-items: center; gap: 0.5rem; }
+    .footer-links a:hover { color: #fff; text-decoration: none; }
+    .footer-bottom { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid rgba(255,255,255,0.1); font-size: 0.75rem; color: rgba(255,255,255,0.35); line-height: 1.85; }
+
+    /* ============================================
+       モーダル [APP-SPECIFIC]
+       ============================================ */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 200;
+      display: flex; align-items: flex-end; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--card); border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%; max-width: var(--max-w); max-height: 90vh; overflow-y: auto;
+      padding: 1.5rem; transform: translateY(24px); transition: transform 0.2s;
+    }
+    .modal-overlay.open .modal { transform: translateY(0); }
+    @media (min-width: 600px) { .modal-overlay { align-items: center; } .modal { border-radius: var(--radius); max-height: 82vh; } }
+    .modal-header  { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
+    .modal-close   { background: none; border: none; font-size: 1.375rem; cursor: pointer; color: var(--text-light); padding: 0.25rem; flex-shrink: 0; }
+    .modal-date    { font-size: 0.875rem; color: var(--text-light); }
+    .modal-single-img  { width: 100%; border-radius: 8px; margin: 0.75rem 0; object-fit: cover; max-height: 50vw; }
+    .modal-multi-imgs  { display: flex; gap: 0.5rem; overflow-x: auto; margin: 0.75rem 0; }
+    .modal-multi-imgs img { height: 160px; width: auto; flex-shrink: 0; border-radius: 8px; object-fit: cover; }
+    .modal-text    { font-size: 1rem; line-height: 1.9; white-space: pre-wrap; }
+    .modal-harvest { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; background: #FFF3CC; color: #7A5C00; padding: 0.25rem 0.875rem; border-radius: 999px; font-weight: 500; margin: 0.75rem 0; }
+    .modal-tags    { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 1rem; }
+    .modal-tag     { font-size: 0.8125rem; background: var(--primary-light); color: var(--primary); padding: 0.25rem 0.75rem; border-radius: 999px; }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================
+       サイトヘッダー [TEMPLATE]
+       ============================================ -->
+  <header class="site-header">
+    <div class="logo">
+      自給菜園ノート<span class="logo-sub">saien-note</span>
+    </div>
+    <nav class="header-nav">
+      <a href="#gallery">記録</a>
+      <a href="#pwa">アプリ</a>
+      <a href="https://career-life.design" target="_blank">研究所</a>
+    </nav>
+  </header>
+
+
+  <!-- ============================================
+       ヒーロー [APP-SPECIFIC]
+       ============================================ -->
+  <section class="hero">
+    <div class="container">
+      <p class="hero-eyebrow">キャリア＆ライフデザイン研究所 ／ 食ドメイン</p>
+      <h1 class="hero-catchphrase">
+        種を蒔く<span class="dot">。</span><br>
+        コードを書く<span class="dot">。</span><br>
+        未来へ渡す<span class="dot">。</span>
+      </h1>
+      <p class="hero-intro">
+        60歳。定年を前に畑を始め、気づいたらアプリも作っていた。孫に食べさせたくて種を蒔き、記録したくてコードを書いた。うまくいかないことの方が多いけれど、それも含めて記録している。AIと対話しながら、100年時代の地図を描いている途中。
+      </p>
+      <p class="hero-author">— <strong>時代進（Jidai Susumu）</strong>　キャリア＆ライフデザイン研究所</p>
+    </div>
+  </section>
+
+
+  <!-- ============================================
+       3本柱 [TEMPLATE]
+       ============================================ -->
+  <section class="pillars">
+    <div class="container">
+      <p class="section-label">このサイトについて</p>
+      <div class="pillars-grid">
+        <div class="pillar">
+          <span class="pillar-icon">🥬</span>
+          <h2 class="pillar-title">食を育てる</h2>
+          <p class="pillar-body">60歳を前に畑を借りた。種を蒔き、水をやり、収穫する。うまくいかないことの方が多い。それでも続けるのは、孫に食べさせたいからだ。自分の手で育てたものを、自分の言葉で記録する。</p>
+        </div>
+        <div class="pillar">
+          <span class="pillar-icon">💻</span>
+          <h2 class="pillar-title">AIと共に作る</h2>
+          <p class="pillar-body">記録したくてアプリを作った。プログラマーではない。でもAIと対話しながら、設計して、動かした。「AIを使う」のではなく「AIと一緒に考える」という感覚が近い。その過程ごと、記録している。</p>
+        </div>
+        <div class="pillar">
+          <span class="pillar-icon">📖</span>
+          <h2 class="pillar-title">記録して、渡す</h2>
+          <p class="pillar-body">100年時代を生きるには、地図が要る。食べること、作ること、学ぶこと——日々の実践を記録し、問いに変え、次の世代へ渡していく。それがキャリア＆ライフデザイン研究所の仕事だ。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================
+       ギャラリー [APP-SPECIFIC]
+       ============================================ -->
+  <section id="gallery">
+    <div class="container">
+      <div class="gallery-header">
+        <div>
+          <p class="section-label">畑の記録</p>
+          <h2 class="section-title" style="margin-bottom:0;">最近の活動</h2>
+        </div>
+        <span id="record-count"></span>
+      </div>
+
+      <div class="filters">
+        <!-- カテゴリ -->
+        <div>
+          <p class="filter-label">カテゴリ</p>
+          <div class="filter-row" id="cat-filters">
+            <button class="filter-btn active" data-cat="all">すべて</button>
+            <button class="filter-btn" data-cat="veggie">🥬 野菜</button>
+            <button class="filter-btn" data-cat="bed">🌱 畝</button>
+            <button class="filter-btn" data-cat="diary">📔 日記</button>
+          </div>
+        </div>
+        <!-- 月（動的） -->
+        <div id="month-filter-wrap" style="display:none;">
+          <p class="filter-label">月で絞り込む</p>
+          <div class="scroll-row" id="month-filters"></div>
+        </div>
+        <!-- タグ（動的） -->
+        <div id="tag-filter-wrap" style="display:none;">
+          <p class="filter-label">野菜・タグ</p>
+          <div class="scroll-row" id="tag-filters"></div>
+        </div>
+      </div>
+
+      <!-- グリッド（初期スケルトン） -->
+      <div class="gallery-grid" id="gallery-grid">
+        <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-text"><div class="skeleton-line" style="width:65%"></div><div class="skeleton-line" style="width:85%"></div></div></div>
+        <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-text"><div class="skeleton-line" style="width:70%"></div><div class="skeleton-line" style="width:50%"></div></div></div>
+        <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-text"><div class="skeleton-line" style="width:55%"></div><div class="skeleton-line" style="width:80%"></div></div></div>
+        <div class="skeleton-card"><div class="skeleton-img"></div><div class="skeleton-text"><div class="skeleton-line" style="width:75%"></div><div class="skeleton-line" style="width:60%"></div></div></div>
+      </div>
+
+      <!-- アプリCTA（ギャラリー直下）
+           [MONETIZATION] 有料化するときの変更箇所:
+             .btn-primary href → Stripe Payment Link URL
+             ボタンテキスト    → 「¥500 で入手する」など
+             .btn-note        → 「購入後すぐに使えます」など -->
+      <div class="app-cta">
+        <p class="app-cta-eyebrow">📱 この記録は「自給菜園ノート」で作っています</p>
+        <h3 class="app-cta-title">あなたも菜園記録を始めませんか</h3>
+        <p class="app-cta-desc">
+          写真を撮って、タグを選んで、コメントを書くだけ。<br>
+          収穫した野菜の数も記録できます。<br>
+          圏外でも動く、iPhoneのホーム画面に追加できるアプリです。
+        </p>
+        <a class="btn-primary" href="/app/" target="_blank">自給菜園ノートを使ってみる（無料）</a>
+        <span class="btn-note">↓ インストール方法はこのページの下で説明しています</span>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================
+       PWA説明セクション [APP-SPECIFIC]
+       ============================================ -->
+  <section class="pwa-section" id="pwa">
+    <div class="container">
+      <p class="section-label">アプリについて</p>
+      <h2 class="section-title">自給菜園ノートとは</h2>
+
+      <div class="pwa-points">
+        <div class="pwa-point">
+          <div class="pwa-point-icon">📲</div>
+          <p class="pwa-point-label">インストール不要</p>
+          <p class="pwa-point-desc">App Storeは使いません。Safariから直接追加できます</p>
+        </div>
+        <div class="pwa-point">
+          <div class="pwa-point-icon">✈️</div>
+          <p class="pwa-point-label">圏外でも動く</p>
+          <p class="pwa-point-desc">畑は電波が届かないことも。オフラインで記録できます</p>
+        </div>
+        <div class="pwa-point">
+          <div class="pwa-point-icon">📷</div>
+          <p class="pwa-point-label">写真で記録</p>
+          <p class="pwa-point-desc">カメラで撮影・アルバムから選択。成長を写真で追えます</p>
+        </div>
+        <div class="pwa-point">
+          <div class="pwa-point-icon">🆓</div>
+          <p class="pwa-point-label">無料で使える</p>
+          <p class="pwa-point-desc">基本機能はすべて無料。登録不要ですぐ使えます</p>
+        </div>
+      </div>
+
+      <!-- スクリーンショット（実機撮影後に差し替え）
+           差し替え方: public/img/ に画像を置き、
+           screenshot-frame の中身を
+           <img src="/img/screen-home.png" alt="ホーム画面"> に変える -->
+      <div class="screenshots">
+        <div class="screenshot-frame">
+          <span style="font-size:1.5rem;">🏠</span>
+          <span class="screenshot-label">ホーム画面<br>記録一覧</span>
+        </div>
+        <div class="screenshot-frame">
+          <span style="font-size:1.5rem;">➕</span>
+          <span class="screenshot-label">記録追加<br>写真・タグ</span>
+        </div>
+        <div class="screenshot-frame">
+          <span style="font-size:1.5rem;">📊</span>
+          <span class="screenshot-label">年比較<br>成長を追う</span>
+        </div>
+        <div class="screenshot-frame">
+          <span style="font-size:1.5rem;">🌐</span>
+          <span class="screenshot-label">公開画面<br>ギャラリーへ</span>
+        </div>
+      </div>
+
+      <h3 style="font-family:var(--font-serif);font-size:1.0625rem;font-weight:700;margin-bottom:1.25rem;">iPhoneへのインストール方法</h3>
+      <div class="install-steps">
+        <div class="install-step">
+          <div class="step-num">1</div>
+          <div class="step-text">
+            iPhoneのSafariで <strong><a href="/app/" target="_blank">このリンク</a></strong> を開く
+            <small>ChromeやFirefoxでは動作しません。Safariをご利用ください</small>
+          </div>
+        </div>
+        <div class="install-step">
+          <div class="step-num">2</div>
+          <div class="step-text">画面下の共有ボタン（四角と矢印のアイコン）をタップ</div>
+        </div>
+        <div class="install-step">
+          <div class="step-num">3</div>
+          <div class="step-text">
+            「ホーム画面に追加」を選んで「追加」をタップ
+            <small>アイコンがホーム画面に表示されます</small>
+          </div>
+        </div>
+        <div class="install-step">
+          <div class="step-num">4</div>
+          <div class="step-text">
+            ホーム画面のアイコンから起動するとアプリとして動作します
+            <small>初回はオンラインで開いてください。以降は圏外でも使えます</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================
+       制作過程セクション [APP-SPECIFIC]
+       → career-life.design への誘導入口
+       ============================================ -->
+  <section>
+    <div class="container">
+      <p class="section-label">どうやって作ったか</p>
+      <h2 class="section-title">AIと一緒に設計した記録アプリ</h2>
+
+      <div class="making-card">
+        <h3 class="making-card-title">プログラマーではないが、動くものができた</h3>
+        <p class="making-card-body">
+          このアプリはAIとの対話で設計・開発した。コードは自分で書いていない。「どう動かしたいか」を言葉にして、AIが実装案を返す。それを確認して、修正して、また対話する——その繰り返しで完成した。<br><br>
+          うまくいかないことも多かった。iOS Safariの制約、画像保存の落とし穴、認証の設計。失敗した過程ごと、記録している。
+        </p>
+        <div class="tech-chips">
+          <span class="tech-chip">React + Vite</span>
+          <span class="tech-chip">IndexedDB</span>
+          <span class="tech-chip">Cloudflare Workers</span>
+          <span class="tech-chip">Cloudflare R2</span>
+          <span class="tech-chip">GitHub Pages</span>
+          <span class="tech-chip">PWA</span>
+        </div>
+      </div>
+
+      <div class="making-card">
+        <h3 class="making-card-title">60代からのアプリ開発——設計の考え方</h3>
+        <p class="making-card-body">
+          「何を作るか」より「なぜ作るか」から始めた。孫に食べさせたい野菜を記録したい。畑の変化を写真で残したい。それだけだった。目的が決まると、設計の判断がブレなくなる。<br><br>
+          AIとの協働、ツールの選び方、収益化の考え方——その過程を研究所でまとめている。
+        </p>
+      </div>
+
+      <a class="link-arrow" href="https://career-life.design" target="_blank">
+        制作過程の詳細と研究所の活動を読む →
+      </a>
+    </div>
+  </section>
+
+
+  <!-- ============================================
+       フッター [TEMPLATE]
+       ============================================ -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <p class="name">キャリア＆ライフデザイン研究所</p>
+          <p class="tagline">時代進（Jidai Susumu）<br>100年時代の地図を描く</p>
+        </div>
+        <div class="footer-links">
+          <a href="https://career-life.design" target="_blank">🔬 career-life.design（研究・執筆活動）</a>
+          <a href="https://kyoshinkajournal.substack.com" target="_blank">📬 協進化ジャーナル（Substack）</a>
+          <a href="/app/" target="_blank">📱 自給菜園ノート アプリを開く</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2026 時代進 ／ キャリア＆ライフデザイン研究所</p>
+        <p>掲載内容は個人の菜園記録です。農業指導・専門的アドバイスの提供を目的とするものではありません。このアプリはAIとの対話で開発されました。</p>
+      </div>
+    </div>
+  </footer>
+
+
+  <!-- モーダル（記録詳細） -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="modal-meta" class="modal-date"></span>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+
+  <script>
+    const API_BASE  = 'https://api.saien.career-life.tech';
+    const CAT_LABEL = { veggie: '🥬 野菜', bed: '🌱 畝', diary: '📔 日記' };
+    const CAT_EMOJI = { veggie: '🥬', bed: '🌱', diary: '📔' };
+
+    let allRecords    = [];
+    let selectedCat   = 'all';
+    let selectedMonth = null;
+    let selectedTag   = null;
+
+    async function fetchRecords() {
+      try {
+        const res  = await fetch(`${API_BASE}/records`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        return Array.isArray(data) ? data : (data.records ?? []);
+      } catch { return null; }
+    }
+
+    function filtered() {
+      return allRecords.filter(r => {
+        const catOk   = selectedCat   === 'all' || r.category === selectedCat;
+        const monthOk = !selectedMonth || (r.date && r.date.startsWith(selectedMonth));
+        const tagOk   = !selectedTag   || (r.tags && r.tags.includes(selectedTag));
+        return catOk && monthOk && tagOk;
+      });
+    }
+
+    function months() {
+      const s = new Set();
+      allRecords
+        .filter(r => selectedCat === 'all' || r.category === selectedCat)
+        .forEach(r => { if (r.date) s.add(r.date.slice(0, 7)); });
+      return [...s].sort().reverse();
+    }
+
+    function tags() {
+      const s = new Set();
+      allRecords
+        .filter(r => selectedCat === 'all' || r.category === selectedCat)
+        .forEach(r => (r.tags || []).forEach(t => s.add(t)));
+      return [...s].sort();
+    }
+
+    function cardHTML(r) {
+      const imgKey  = r.imageKey || (r.imageKeys && r.imageKeys[0]);
+      const comment = r.comment || r.text || '';
+      const cat     = r.category || 'diary';
+      const tagList = (r.tags || []).slice(0, 3);
+      const date    = r.date ? r.date.replace(/-/g, '/') : '';
+      const imgPart = imgKey
+        ? `<img class="card-image" src="${API_BASE}/image/${imgKey}" alt="" loading="lazy">`
+        : `<div class="card-placeholder ${cat}">${CAT_EMOJI[cat] || '📔'}</div>`;
+      return `
+        <div class="record-card" data-id="${r.id}">
+          ${imgPart}
+          <div class="card-body">
+            <div class="card-meta">
+              <span class="card-date">${date}</span>
+              <span class="card-category cat-${cat}">${CAT_LABEL[cat] || cat}</span>
+            </div>
+            ${comment ? `<p class="card-comment">${comment}</p>` : ''}
+            ${r.harvestCount != null ? `<div class="harvest-badge">🌾 ${r.harvestCount}個</div>` : ''}
+            <div class="card-tags">${tagList.map(t => `<span class="card-tag">${t}</span>`).join('')}</div>
+          </div>
+        </div>`;
+    }
+
+    function renderGrid() {
+      const grid    = document.getElementById('gallery-grid');
+      const records = filtered();
+      document.getElementById('record-count').textContent = `${records.length}件`;
+      if (records.length === 0) {
+        grid.innerHTML = `<div class="gallery-status">該当する記録がありません</div>`;
+        return;
+      }
+      grid.innerHTML = records.map(cardHTML).join('');
+      grid.querySelectorAll('.record-card').forEach(el => {
+        el.addEventListener('click', () => {
+          const rec = allRecords.find(r => r.id === el.dataset.id);
+          if (rec) openModal(rec);
+        });
+      });
+    }
+
+    function renderMonthFilters() {
+      const ms   = months();
+      const wrap = document.getElementById('month-filter-wrap');
+      const row  = document.getElementById('month-filters');
+      if (ms.length === 0) { wrap.style.display = 'none'; return; }
+      wrap.style.display = '';
+      row.innerHTML = ms.map(m => {
+        const [y, mo] = m.split('-');
+        return `<button class="chip-btn${selectedMonth === m ? ' active' : ''}" data-month="${m}">${y}年${mo}月</button>`;
+      }).join('');
+      row.querySelectorAll('.chip-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectedMonth = selectedMonth === btn.dataset.month ? null : btn.dataset.month;
+          renderMonthFilters();
+          renderGrid();
+        });
+      });
+    }
+
+    function renderTagFilters() {
+      const ts   = tags();
+      const wrap = document.getElementById('tag-filter-wrap');
+      const row  = document.getElementById('tag-filters');
+      if (ts.length === 0) { wrap.style.display = 'none'; return; }
+      wrap.style.display = '';
+      row.innerHTML = ts.map(t =>
+        `<button class="chip-btn${selectedTag === t ? ' active' : ''}" data-tag="${t}">${t}</button>`
+      ).join('');
+      row.querySelectorAll('.chip-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectedTag = selectedTag === btn.dataset.tag ? null : btn.dataset.tag;
+          renderTagFilters();
+          renderGrid();
+        });
+      });
+    }
+
+    document.getElementById('cat-filters').addEventListener('click', e => {
+      const btn = e.target.closest('.filter-btn');
+      if (!btn) return;
+      selectedCat   = btn.dataset.cat;
+      selectedMonth = null;
+      selectedTag   = null;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+      renderMonthFilters();
+      renderTagFilters();
+      renderGrid();
+    });
+
+    function openModal(r) {
+      const overlay = document.getElementById('modal-overlay');
+      const body    = document.getElementById('modal-body');
+      const meta    = document.getElementById('modal-meta');
+      const date    = r.date ? r.date.replace(/-/g, '/') : '';
+      const time    = r.time ? ` ${r.time}` : '';
+      const comment = r.comment || r.text || '';
+      const imgKeys = r.imageKeys && r.imageKeys.length ? r.imageKeys : r.imageKey ? [r.imageKey] : [];
+      meta.textContent = `${CAT_LABEL[r.category] || ''} · ${date}${time}`;
+      let imgHTML = '';
+      if (imgKeys.length === 1) {
+        imgHTML = `<img class="modal-single-img" src="${API_BASE}/image/${imgKeys[0]}" alt="">`;
+      } else if (imgKeys.length > 1) {
+        imgHTML = `<div class="modal-multi-imgs">${imgKeys.map(k => `<img src="${API_BASE}/image/${k}" alt="">`).join('')}</div>`;
+      }
+      body.innerHTML = `
+        ${imgHTML}
+        ${r.harvestCount != null ? `<div class="modal-harvest">🌾 ${r.harvestCount}個 収穫</div>` : ''}
+        ${comment ? `<p class="modal-text">${comment}</p>` : ''}
+        ${(r.tags||[]).length ? `<div class="modal-tags">${r.tags.map(t=>`<span class="modal-tag">${t}</span>`).join('')}</div>` : ''}
+      `;
+      overlay.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('modal-overlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('modal-overlay')) closeModal();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    (async () => {
+      const records = await fetchRecords();
+      if (records === null) {
+        document.getElementById('gallery-grid').innerHTML =
+          `<div class="gallery-status">記録の取得に失敗しました。<br>しばらくしてから再度お試しください。</div>`;
+        return;
+      }
+      allRecords = records;
+      renderMonthFilters();
+      renderTagFilters();
+      renderGrid();
+    })();
+  </script>
+
+</body>
+</html>
