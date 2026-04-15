@@ -1,5 +1,7 @@
 // src/components/SettingScreen.jsx
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import { set } from 'idb-keyval';
+import { recordsStore, deleteRecord, saveTags, saveBedVeggieMap } from '../utils/db';
 
 const COLORS = {
   bg:           '#F7F5F0',
@@ -18,29 +20,42 @@ const COLORS = {
 
 const APP_VERSION = '1.0.0';
 
-async function buildBackupZip(records, tags) {
+// ─────────────────────────────────────────
+// バックアップZIP作成
+// bedVeggieMap も含めて保存する
+// ─────────────────────────────────────────
+async function buildBackupZip(records, tags, bedVeggieMap) {
   const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
 
-  const dataMeta = records.map(({ imageBlob, images, ...rest }) => rest);
-  zip.file('data.json', JSON.stringify(dataMeta, null, 2));
-  zip.file('tags.json', JSON.stringify(tags, null, 2));
-
-  const imagesFolder = zip.folder('images');
-  for (const r of records) {
-    if (r.imageBlob) {
-      const buf = await r.imageBlob.arrayBuffer();
-      imagesFolder.file(`${r.id}.jpg`, buf);
-    }
-    if (r.images) {
-      for (let i = 0; i < r.images.length; i++) {
-        const buf = await r.images[i].arrayBuffer();
-        imagesFolder.file(`${r.id}_${i}.jpg`, buf);
-      }
-    }
-  }
+  zip.file('data.json', JSON.stringify(records, null, 2));
+  zip.file('tags.json', JSON.stringify({ tags, bedVeggieMap }, null, 2));
 
   return zip.generateAsync({ type: 'blob' });
+}
+
+// ─────────────────────────────────────────
+// ZIPから復元
+// 新形式（{tags, bedVeggieMap}）と旧形式（タグのみ）の両方に対応
+// ─────────────────────────────────────────
+async function parseBackupZip(zipFile) {
+  const JSZip = (await import('jszip')).default;
+  const zip = await JSZip.loadAsync(zipFile);
+
+  const dataJson = await zip.file('data.json')?.async('string');
+  if (!dataJson) throw new Error('data.json が見つかりません。正しいバックアップファイルか確認してください。');
+  const records = JSON.parse(dataJson);
+
+  const tagsJson = await zip.file('tags.json')?.async('string');
+  if (!tagsJson) throw new Error('tags.json が見つかりません。正しいバックアップファイルか確認してください。');
+  const tagsData = JSON.parse(tagsJson);
+
+  // 新形式: { tags: {...}, bedVeggieMap: {...} }
+  // 旧形式: { 野菜: [...], 状態: [...], ... }
+  const tags        = tagsData.tags        ?? tagsData;
+  const bedVeggieMap = tagsData.bedVeggieMap ?? {};
+
+  return { records, tags, bedVeggieMap };
 }
 
 function downloadBlob(blob, filename) {
@@ -201,7 +216,6 @@ function ApiKeySection({ settings }) {
       )}
 
       {hasKey ? (
-        /* 設定済み表示 */
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 20 }}>✅</span>
@@ -218,7 +232,6 @@ function ApiKeySection({ settings }) {
           >削除</button>
         </div>
       ) : (
-        /* 未設定：入力フォーム */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
@@ -267,9 +280,17 @@ function ApiKeySection({ settings }) {
 export function SettingScreen({ tags, records, settings }) {
   const [newTagInputs, setNewTagInputs] = useState({});
   const [newCategory,  setNewCategory]  = useState('');
-  const [backingUp,    setBackingUp]    = useState(false);
-  const [backupError,  setBackupError]  = useState(null);
-  const [backupMsg,    setBackupMsg]    = useState('');
+
+  // バックアップ
+  const [backingUp,   setBackingUp]   = useState(false);
+  const [backupError, setBackupError] = useState(null);
+  const [backupMsg,   setBackupMsg]   = useState('');
+
+  // 復元
+  const [restoring,    setRestoring]    = useState(false);
+  const [restoreError, setRestoreError] = useState(null);
+  const [restoreMsg,   setRestoreMsg]   = useState('');
+  const restoreInputRef = useRef(null);
 
   const handleAddTag = async (category) => {
     const tag = (newTagInputs[category] ?? '').trim();
@@ -301,13 +322,18 @@ export function SettingScreen({ tags, records, settings }) {
     }
   };
 
+  // ─── バックアップ（bedVeggieMap も含む）───
   const handleBackup = async () => {
     setBackingUp(true);
     setBackupError(null);
     setBackupMsg('');
     try {
-      const blob = await buildBackupZip(records.records, tags.tags);
-      const now  = new Date();
+      const blob = await buildBackupZip(
+        records.records,
+        tags.tags,
+        tags.bedVeggieMap,
+      );
+      const now      = new Date();
       const yyyymmdd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
       downloadBlob(blob, `saien-note-backup-${yyyymmdd}.zip`);
       setBackupMsg('バックアップをダウンロードしました');
@@ -316,6 +342,51 @@ export function SettingScreen({ tags, records, settings }) {
       setBackupError(e.message);
     } finally {
       setBackingUp(false);
+    }
+  };
+
+  // ─── 復元 ───
+  const handleRestoreFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    if (!window.confirm(
+      `「${file.name}」から復元します。\n現在のデータはすべて削除されます。\nよろしいですか？`
+    )) return;
+
+    setRestoring(true);
+    setRestoreError(null);
+    setRestoreMsg('');
+
+    try {
+      const { records: newRecords, tags: newTags, bedVeggieMap: newMap } =
+        await parseBackupZip(file);
+
+      // 既存レコードを全削除
+      for (const r of records.records) {
+        await deleteRecord(r.id);
+      }
+
+      // 新しいレコードを追加（元のIDと日時を保持したまま保存）
+      for (const r of newRecords) {
+        await set(r.id, r, recordsStore);
+      }
+
+      // タグ・マッピングを上書き保存
+      await saveTags(newTags);
+      await saveBedVeggieMap(newMap);
+
+      setRestoreMsg(`✅ ${newRecords.length}件の記録を復元しました。画面を更新します…`);
+
+      // 1.5秒後にリロード
+      setTimeout(() => window.location.reload(), 1500);
+
+    } catch (e) {
+      console.error(e);
+      setRestoreError(e.message);
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -472,44 +543,91 @@ export function SettingScreen({ tags, records, settings }) {
           )}
         </section>
 
-        {/* ─── バックアップ ─── */}
+        {/* ─── バックアップ・復元 ─── */}
         <section style={{ marginBottom: 32 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, marginBottom: 12 }}>
-            💾 バックアップ
+            💾 バックアップ・復元
           </div>
           <div style={{
             background: COLORS.card, borderRadius: 12,
             border: `1px solid ${COLORS.border}`, padding: 16,
+            display: 'flex', flexDirection: 'column', gap: 12,
           }}>
-            <p style={{ fontSize: 16, color: COLORS.textLight, marginTop: 0, marginBottom: 12 }}>
-              全記録と画像をZIPファイルにまとめてダウンロードします。
-            </p>
-            {backupError && (
-              <div style={{ padding: 10, borderRadius: 8, background: '#FEE', color: '#C00', fontSize: 16, marginBottom: 8 }}>
-                エラー: {backupError}
+
+            {/* バックアップ */}
+            <div>
+              <p style={{ fontSize: 16, color: COLORS.textLight, marginTop: 0, marginBottom: 8 }}>
+                全記録・タグ・畝設定をZIPファイルにまとめてダウンロードします。
+              </p>
+              {backupError && (
+                <div style={{ padding: 10, borderRadius: 8, background: '#FEE', color: '#C00', fontSize: 16, marginBottom: 8 }}>
+                  エラー: {backupError}
+                </div>
+              )}
+              {backupMsg && (
+                <div style={{ padding: 10, borderRadius: 8, background: COLORS.primaryLight, color: COLORS.primary, fontSize: 16, marginBottom: 8 }}>
+                  {backupMsg}
+                </div>
+              )}
+              <button
+                onClick={handleBackup}
+                disabled={backingUp}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: 8, minHeight: 56,
+                  border: 'none', background: COLORS.accent,
+                  color: '#fff', fontSize: 17, fontWeight: 600,
+                  cursor: backingUp ? 'not-allowed' : 'pointer',
+                  opacity: backingUp ? 0.6 : 1,
+                }}
+              >
+                {backingUp ? '準備中…' : '📥 バックアップをダウンロード'}
+              </button>
+              <div style={{ fontSize: 16, color: COLORS.textLight, marginTop: 6 }}>
+                記録数: {records.records.length}件
               </div>
-            )}
-            {backupMsg && (
-              <div style={{ padding: 10, borderRadius: 8, background: COLORS.primaryLight, color: COLORS.primary, fontSize: 16, marginBottom: 8 }}>
-                {backupMsg}
-              </div>
-            )}
-            <button
-              onClick={handleBackup}
-              disabled={backingUp}
-              style={{
-                width: '100%', padding: '14px', borderRadius: 8, minHeight: 56,
-                border: 'none', background: COLORS.accent,
-                color: '#fff', fontSize: 17, fontWeight: 600,
-                cursor: backingUp ? 'not-allowed' : 'pointer',
-                opacity: backingUp ? 0.6 : 1,
-              }}
-            >
-              {backingUp ? '準備中…' : 'バックアップをダウンロード'}
-            </button>
-            <div style={{ fontSize: 16, color: COLORS.textLight, marginTop: 8 }}>
-              記録数: {records.records.length}件
             </div>
+
+            {/* 区切り */}
+            <div style={{ borderTop: `1px solid ${COLORS.border}` }} />
+
+            {/* 復元 */}
+            <div>
+              <p style={{ fontSize: 16, color: COLORS.textLight, marginTop: 0, marginBottom: 8 }}>
+                バックアップZIPから記録を復元します。現在のデータは削除されます。
+              </p>
+              {restoreError && (
+                <div style={{ padding: 10, borderRadius: 8, background: '#FEE', color: '#C00', fontSize: 16, marginBottom: 8 }}>
+                  エラー: {restoreError}
+                </div>
+              )}
+              {restoreMsg && (
+                <div style={{ padding: 10, borderRadius: 8, background: COLORS.primaryLight, color: COLORS.primary, fontSize: 16, marginBottom: 8 }}>
+                  {restoreMsg}
+                </div>
+              )}
+              <input
+                ref={restoreInputRef}
+                type="file"
+                accept=".zip"
+                style={{ display: 'none' }}
+                onChange={handleRestoreFileChange}
+              />
+              <button
+                onClick={() => restoreInputRef.current?.click()}
+                disabled={restoring}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: 8, minHeight: 56,
+                  border: `2px solid ${COLORS.red}`,
+                  background: '#fff', color: COLORS.red,
+                  fontSize: 17, fontWeight: 600,
+                  cursor: restoring ? 'not-allowed' : 'pointer',
+                  opacity: restoring ? 0.6 : 1,
+                }}
+              >
+                {restoring ? '復元中…' : '📤 バックアップから復元'}
+              </button>
+            </div>
+
           </div>
         </section>
 
@@ -535,6 +653,7 @@ export function SettingScreen({ tags, records, settings }) {
             ))}
           </div>
         </section>
+
       </div>
     </div>
   );
