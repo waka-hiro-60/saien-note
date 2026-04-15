@@ -10,7 +10,7 @@ export default defineConfig({
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
         name: '自給菜園ノート',
-        short_name: '菜園ノート',
+        short_name: '自給菜園ノート',
         description: '自給菜園の記録をかんたんに',
         theme_color: '#4A7C59',
         background_color: '#F7F5F0',
