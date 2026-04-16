@@ -214,11 +214,11 @@
     .screenshots { display: flex; gap: 0.875rem; overflow-x: auto; padding-bottom: 4px; margin-bottom: 2rem; scrollbar-width: none; }
     .screenshots::-webkit-scrollbar { display: none; }
     .screenshot-frame {
-      flex-shrink: 0; width: 160px; aspect-ratio: 9/19;
+      flex-shrink: 0; width: 160px; aspect-ratio: 750/1199;
       background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--radius);
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;
     }
-    .screenshot-frame img { width:100%; height:100%; object-fit:cover; border-radius: calc(var(--radius) - 1px); }
+    /* 実機SS追加後: .screenshot-frame img { width:100%; height:100%; object-fit:cover; } */
     .screenshot-label { font-size: 0.6875rem; color: var(--text-light); text-align: center; padding: 0 0.5rem; }
 
     .install-steps { display: flex; flex-direction: column; gap: 0.75rem; }
@@ -443,16 +443,20 @@
            <img src="/img/screen-home.png" alt="ホーム画面"> に変える -->
       <div class="screenshots">
         <div class="screenshot-frame">
-          <img src="/img/screen-home.png" alt="ホーム画面・記録一覧">
+          <span style="font-size:1.5rem;">🏠</span>
+          <span class="screenshot-label">ホーム画面<br>記録一覧</span>
         </div>
         <div class="screenshot-frame">
-          <img src="/img/screen-add.png" alt="記録追加・写真・タグ">
+          <span style="font-size:1.5rem;">➕</span>
+          <span class="screenshot-label">記録追加<br>写真・タグ</span>
         </div>
         <div class="screenshot-frame">
-          <img src="/img/screen-compare.png" alt="年比較・成長を追う">
+          <span style="font-size:1.5rem;">📊</span>
+          <span class="screenshot-label">年比較<br>成長を追う</span>
         </div>
         <div class="screenshot-frame">
-          <img src="/img/screen-setting.png" alt="設定画面・キー入力はここ">
+          <span style="font-size:1.5rem;">⚙️</span>
+          <span class="screenshot-label">設定画面<br>キー入力はここ</span>
         </div>
       </div>
 
