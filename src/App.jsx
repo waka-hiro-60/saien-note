@@ -1,23 +1,25 @@
 // src/App.jsx
 import { useState, useEffect } from 'react';
-import { TabBar }        from './components/TabBar';
-import { HomeScreen }    from './components/HomeScreen';
-import { AddScreen }     from './components/AddScreen';
-import { TagScreen }     from './components/TagScreen';
-import { PublishScreen } from './components/PublishScreen';
-import { SettingScreen } from './components/SettingScreen';
-import { useRecords }    from './hooks/useRecords';
-import { useTags }       from './hooks/useTags';
-import { useSettings }   from './hooks/useSettings';
+import { TabBar }         from './components/TabBar';
+import { HomeScreen }     from './components/HomeScreen';
+import { AddScreen }      from './components/AddScreen';
+import { TagScreen }      from './components/TagScreen';
+import { PublishScreen }  from './components/PublishScreen';
+import { SettingScreen }  from './components/SettingScreen';
+import { LicenseScreen }  from './components/LicenseScreen';
+import { useRecords }     from './hooks/useRecords';
+import { useTags }        from './hooks/useTags';
+import { useSettings }    from './hooks/useSettings';
 
 const COLORS = {
-  bg: '#F7F5F0',
-  text: '#2C2C2C',
+  bg:      '#F7F5F0',
+  text:    '#2C2C2C',
+  primary: '#4A7C59',
 };
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
-  const [isOnline, setIsOnline]   = useState(navigator.onLine);
+  const [isOnline,  setIsOnline]  = useState(navigator.onLine);
 
   // オフライン検知
   useEffect(() => {
@@ -53,6 +55,41 @@ export default function App() {
     }
   };
 
+  // ─── ライセンス確認中（起動画面）───────────────────────────────────────────
+  if (settingsHook.loading) {
+    return (
+      <div style={{
+        width: '100%', maxWidth: 430, margin: '0 auto', height: '100dvh',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: COLORS.bg, flexDirection: 'column', gap: 16,
+        fontFamily: "'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif",
+      }}>
+        <div style={{ fontSize: 56 }}>🌱</div>
+        <div style={{
+          width: 32, height: 32,
+          border: `3px solid #D0E4D0`,
+          borderTop: `3px solid ${COLORS.primary}`,
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // ─── ライセンスキー未設定 or 無効 ──────────────────────────────────────────
+  if (settingsHook.licenseStatus === 'invalid') {
+    return (
+      <div style={{
+        width: '100%', maxWidth: 430, margin: '0 auto', height: '100dvh',
+        background: COLORS.bg,
+      }}>
+        <LicenseScreen onActivate={settingsHook.activateLicense} />
+      </div>
+    );
+  }
+
+  // ─── 通常起動 ──────────────────────────────────────────────────────────────
   return (
     <div style={{
       width: '100%',

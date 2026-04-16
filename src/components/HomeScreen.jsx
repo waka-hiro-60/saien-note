@@ -1,6 +1,8 @@
 // src/components/HomeScreen.jsx
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DetailScreen } from './DetailScreen';
+
+const API_BASE = 'https://api.saien.career-life.tech';
 
 const COLORS = {
   bg:           '#F7F5F0',
@@ -16,6 +18,13 @@ const COLORS = {
   tagText:      '#3A6B47',
   diaryBg:      '#FFF8F0',
   bedBg:        '#F0F5F0',
+};
+
+// お知らせのタイプ別カラー
+const NOTICE_COLORS = {
+  info:    { bg: '#EBF4FF', border: '#93C5FD', text: '#1D4ED8' },
+  warning: { bg: '#FFFBEB', border: '#FCD34D', text: '#92400E' },
+  update:  { bg: '#ECFDF5', border: '#6EE7B7', text: '#065F46' },
 };
 
 function formatDateHeader(dateStr) {
@@ -321,14 +330,29 @@ function LastYearCard({ records, onShowAll }) {
 
 // ─── HomeScreen ───
 export function HomeScreen({ records, tags }) {
-  const [viewMode,       setViewMode]       = useState('list');
-  const [keyword,        setKeyword]        = useState('');
-  const [selectedTags,   setSelectedTags]   = useState([]);
-  const [showArchived,   setShowArchived]   = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState(null);
-  const [showLastYear,   setShowLastYear]   = useState(false);
+  const [viewMode,         setViewMode]         = useState('list');
+  const [keyword,          setKeyword]          = useState('');
+  const [selectedTags,     setSelectedTags]     = useState([]);
+  const [showArchived,     setShowArchived]     = useState(false);
+  const [selectedRecord,   setSelectedRecord]   = useState(null);
+  const [showLastYear,     setShowLastYear]     = useState(false);
+
+  // お知らせバナー用 state
+  const [noticeBanner,     setNoticeBanner]     = useState(null);   // { message, url, type }
+  const [noticeDismissed,  setNoticeDismissed]  = useState(false);
 
   const { loading, error, searchAndFilter, getRecordsInDateRange, reload } = records;
+
+  // 起動時にお知らせを1回取得
+  useEffect(() => {
+    if (!navigator.onLine) return;
+    fetch(`${API_BASE}/notice`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data && data.message) setNoticeBanner(data);
+      })
+      .catch(() => {}); // エラーは無視
+  }, []);
 
   const lastYearRecords = useMemo(() => {
     const today  = new Date();
@@ -396,9 +420,50 @@ export function HomeScreen({ records, tags }) {
     return <VeggieListCard key={r.id} record={r} onTap={setSelectedRecord} />;
   };
 
+  // お知らせバナーのカラーを取得
+  const noticeColor = noticeBanner
+    ? (NOTICE_COLORS[noticeBanner.type] ?? NOTICE_COLORS.info)
+    : null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* ヘッダー */}
+
+      {/* ─── お知らせバナー ─── */}
+      {noticeBanner && !noticeDismissed && (
+        <div style={{
+          background: noticeColor.bg,
+          borderBottom: `1px solid ${noticeColor.border}`,
+          padding: '10px 16px',
+          display: 'flex', alignItems: 'center', gap: 8,
+          flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 16 }}>🔔</span>
+          <span style={{ flex: 1, fontSize: 15, color: noticeColor.text, lineHeight: 1.4 }}>
+            {noticeBanner.message}
+          </span>
+          {noticeBanner.url && (
+            <a
+              href={noticeBanner.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 14, color: noticeColor.text, fontWeight: 600, flexShrink: 0 }}
+            >
+              詳細
+            </a>
+          )}
+          <button
+            onClick={() => setNoticeDismissed(true)}
+            style={{
+              background: 'none', border: 'none',
+              color: noticeColor.text, fontSize: 20,
+              cursor: 'pointer', padding: '0 4px', flexShrink: 0,
+              lineHeight: 1,
+            }}
+          >×</button>
+        </div>
+      )}
+
+      {/* ─── ヘッダー ─── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '14px 16px 10px', background: COLORS.card,
@@ -432,7 +497,7 @@ export function HomeScreen({ records, tags }) {
         </div>
       </div>
 
-      {/* 検索バー */}
+      {/* ─── 検索バー ─── */}
       <div style={{
         padding: '8px 16px 0', background: COLORS.card,
         flexShrink: 0, borderBottom: `1px solid ${COLORS.border}`,
@@ -474,7 +539,7 @@ export function HomeScreen({ records, tags }) {
         )}
       </div>
 
-      {/* コンテンツ */}
+      {/* ─── コンテンツ ─── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
         {error && (
           <div style={{ padding: 12, borderRadius: 8, background: '#FEE', color: '#C00', fontSize: 16, marginBottom: 12 }}>
@@ -531,7 +596,7 @@ export function HomeScreen({ records, tags }) {
         )}
       </div>
 
-      {/* 詳細モーダル */}
+      {/* ─── 詳細モーダル ─── */}
       {selectedRecord && (
         <DetailScreen
           record={selectedRecord}

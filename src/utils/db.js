@@ -199,3 +199,11 @@ export async function saveBedVeggieMap(map) { await set('bedVeggieMap', map, tag
 
 export async function getApiKey() { return (await get('apiKey', settingsStore)) ?? ''; }
 export async function saveApiKey(key) { await set('apiKey', key.trim(), settingsStore); }
+
+// ─── ライセンスキー管理 ──────────────────────────────────────────────────────
+export async function getLicenseKey() { return (await get('licenseKey', settingsStore)) ?? ''; }
+export async function saveLicenseKey(key) { await set('licenseKey', key.trim(), settingsStore); }
+
+// 前回の検証日時（ミリ秒）を保存・取得（オフライン時の7日キャッシュ用）
+export async function getLicenseValidatedAt() { return (await get('licenseValidatedAt', settingsStore)) ?? 0; }
+export async function saveLicenseValidatedAt(ts) { await set('licenseValidatedAt', ts, settingsStore); }
