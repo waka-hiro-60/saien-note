@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node -e \"import('fs').then(async fs=>{ fs.copyFileSync('gallery.html','dist/index.html'); await fs.promises.cp('public/img','dist/img',{recursive:true}); })\"",
+    "build": "vite build && node scripts/post-build.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
